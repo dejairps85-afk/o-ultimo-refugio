@@ -70,6 +70,7 @@ var rifle_reserve := 120
 var rifle_reload_timer := 0.0
 var rifle_reloading := false
 var ammo_label: Label
+var weapon_pickups: Array[Dictionary] = []
 
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
@@ -126,6 +127,7 @@ func _ready() -> void:
 	_apply_player_customization()
 	_build_vehicle()
 	_build_hud()
+	_spawn_weapon_pickups()
 
 func _setup_environment() -> void:
 	world_environment = WorldEnvironment.new()
@@ -1000,6 +1002,18 @@ func _spawn_points_of_interest() -> void:
 func _interact_with_wilderness() -> void:
 	if collect_cooldown > 0.0:
 		return
+	var nearest_weapon_index := -1
+	var nearest_weapon_distance := 2.8
+	for i in range(weapon_pickups.size()):
+		var pickup_node := weapon_pickups[i].get("node") as Node3D
+		if is_instance_valid(pickup_node):
+			var pickup_distance := player.global_position.distance_to(pickup_node.global_position)
+			if pickup_distance < nearest_weapon_distance:
+				nearest_weapon_distance = pickup_distance
+				nearest_weapon_index = i
+	if nearest_weapon_index >= 0:
+		_pickup_weapon(nearest_weapon_index)
+		return
 	var nearest_cache_index := -1
 	var nearest_cache_distance := 3.6
 	for i in range(poi_cache_nodes.size()):
@@ -1704,8 +1718,9 @@ func _spawn_hostile_factions() -> void:
 			var point: Vector2 = camp["center"] + Vector2(rng.randf_range(-5.0, 5.0), rng.randf_range(-5.0, 5.0))
 			human.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
 			add_child(human)
+			var hostile_weapon := ["weapon_pistol", "weapon_smg", "weapon_shotgun", "weapon_rifle"][rng.randi_range(0, 3)]
 			hostile_humans.append({
-				"node": human, "faction": str(camp["name"]), "health": float(camp["health"]), "health_mesh": health_fill, "health_green": health_green, "health_orange": health_orange, "health_red": health_red,
+				"node": human, "weapon_id": hostile_weapon, "faction": str(camp["name"]), "health": float(camp["health"]), "health_mesh": health_fill, "health_green": health_green, "health_orange": health_orange, "health_red": health_red,
 				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
 				"fire_timer": rng.randf_range(0.5, 1.8), "stagger_timer": 0.0,
 				"knockback": Vector3.ZERO, "alive": true,
@@ -2043,7 +2058,7 @@ func _update_infected(delta: float) -> void:
 		player_attack_cooldown -= delta
 	if attack_requested and player_attack_cooldown <= 0.0:
 		player_attack_cooldown = 0.65
-		if equipped_items.get("weapon", "") == "weapon_rifle":
+		if str(equipped_items.get("weapon", "")).begins_with("weapon_") and equipped_items.get("weapon", "") not in ["weapon_fists", "weapon_knife", "weapon_axe"]:
 			_fire_rifle()
 		else:
 			player_attack_anim_time = 0.48
@@ -2066,6 +2081,8 @@ func _update_infected(delta: float) -> void:
 					if float(enemy_data["health"]) <= 0.0:
 						enemy_data["alive"] = false
 						_award_infected_kill()
+						if rng.randf() < 0.12:
+							_drop_weapon_pickup(infected.global_position, "weapon_pistol")
 						infected.queue_free()
 			for hostile in hostile_humans:
 				if not bool(hostile["alive"]):
@@ -2084,6 +2101,7 @@ func _update_infected(delta: float) -> void:
 					status_label.text = "ACERTO NO COMBATENTE  •  %s" % str(hostile["faction"])
 					if float(hostile["health"]) <= 0.0:
 						hostile["alive"] = false
+						_drop_weapon_pickup(npc.global_position, str(hostile.get("weapon_id", "weapon_pistol")))
 						credits += 25
 						_save_profile()
 						npc.queue_free()
@@ -2106,6 +2124,21 @@ func _update_infected(delta: float) -> void:
 					status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
 
 func _fire_rifle() -> void:
+	var weapon_id := str(equipped_items.get("weapon", "weapon_rifle"))
+	var damage := weapon_damage
+	var max_range := 55.0
+	var pellets := 1
+	var spread := 0.0
+	if weapon_id == "weapon_pistol":
+		max_range = 38.0
+	elif weapon_id == "weapon_smg":
+		max_range = 27.0
+	elif weapon_id == "weapon_shotgun":
+		max_range = 19.0
+		pellets = 8
+		spread = 0.105
+	elif weapon_id == "weapon_sniper":
+		max_range = 100.0
 	gunshot_noise_timer = 9.0
 	gunshot_noise_position = player.global_position
 	if rifle_reloading:
@@ -2117,61 +2150,120 @@ func _fire_rifle() -> void:
 	rifle_ammo -= 1
 	var origin := player.global_position + Vector3(0.0, 1.35, 0.0)
 	var forward := -player.global_transform.basis.z
-	var target_point := origin + forward * 55.0
-	var query := PhysicsRayQueryParameters3D.create(origin, target_point)
-	query.exclude = [player.get_rid()]
-	query.collision_mask = 1
-	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var hit_position: Vector3 = hit.get("position", target_point)
-	_spawn_bullet_trace(origin, hit_position)
-	var collider: Object = hit.get("collider")
-	var hit_target := false
-	for enemy_data in enemies:
-		if not bool(enemy_data["alive"]):
-			continue
-		var infected := enemy_data["node"] as CharacterBody3D
-		if is_instance_valid(infected) and collider == infected:
-			enemy_data["health"] = float(enemy_data["health"]) - 42.0
-			enemy_data["stagger_timer"] = 0.35
-			enemy_data["knockback"] = forward * 3.5
-			hit_target = true
-			if float(enemy_data["health"]) <= 0.0:
-				enemy_data["alive"] = false
-				_award_infected_kill()
-				infected.queue_free()
-			break
-	if not hit_target:
+	var total_hits := 0
+	for pellet in range(pellets):
+		var shot_direction := (forward + Vector3(rng.randf_range(-spread, spread), rng.randf_range(-spread, spread), 0.0)).normalized()
+		var target_point := origin + shot_direction * max_range
+		var query := PhysicsRayQueryParameters3D.create(origin, target_point)
+		query.exclude = [player.get_rid()]
+		query.collision_mask = 1
+		var hit := get_world_3d().direct_space_state.intersect_ray(query)
+		_spawn_bullet_trace(origin, hit.get("position", target_point))
+		var collider: Object = hit.get("collider")
+		for enemy_data in enemies:
+			if not bool(enemy_data["alive"]):
+				continue
+			var infected := enemy_data["node"] as CharacterBody3D
+			if is_instance_valid(infected) and collider == infected:
+				enemy_data["health"] = float(enemy_data["health"]) - damage
+				enemy_data["stagger_timer"] = 0.35
+				enemy_data["knockback"] = shot_direction * 3.5
+				total_hits += 1
+				if float(enemy_data["health"]) <= 0.0:
+					enemy_data["alive"] = false
+					_award_infected_kill()
+					if rng.randf() < 0.12:
+						_drop_weapon_pickup(infected.global_position, "weapon_pistol")
+					infected.queue_free()
+				break
 		for hostile in hostile_humans:
 			if not bool(hostile["alive"]):
 				continue
 			var npc := hostile["node"] as CharacterBody3D
 			if is_instance_valid(npc) and collider == npc:
-				hostile["health"] = float(hostile["health"]) - 42.0
+				hostile["health"] = float(hostile["health"]) - damage
 				hostile["stagger_timer"] = 0.35
-				hostile["knockback"] = forward * 3.5
-				hit_target = true
+				hostile["knockback"] = shot_direction * 3.5
+				total_hits += 1
 				if float(hostile["health"]) <= 0.0:
 					hostile["alive"] = false
+					_drop_weapon_pickup(npc.global_position, str(hostile.get("weapon_id", "weapon_pistol")))
 					credits += 25
 					scrap += 2
-					if equipped_items.get("weapon", "") == "weapon_rifle":
-						rifle_reserve = mini(240, rifle_reserve + 6)
 					_save_profile()
 					npc.queue_free()
-					status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS  •  +2 SUCATA"
 				break
-	if not hit_target:
-		status_label.text = "DISPARO — ALVO NÃO ATINGIDO"
-	else:
-		status_label.text = "DISPARO CONFIRMADO  •  -42 HP"
+	status_label.text = "%s: %s" % [_weapon_display_name(weapon_id), "ACERTO CONFIRMADO" if total_hits > 0 else "ALVO NÃO ATINGIDO"]
+	if total_hits > 0:
 		_trigger_camera_shake(0.025)
 	if is_instance_valid(ammo_label):
 		ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
 	_save_profile()
 
+func _weapon_display_name(weapon_id: String) -> String:
+	for item in _shop_catalog():
+		if str(item["id"]) == weapon_id:
+			return str(item["name"])
+	return "ARMA"
+
+func _spawn_weapon_pickups() -> void:
+	_drop_weapon_pickup(Vector3(8.0, _height_at(8.0, -8.0), -8.0), "weapon_pistol")
+	_drop_weapon_pickup(Vector3(72.0, _height_at(72.0, -53.0), -53.0), "weapon_shotgun")
+	_drop_weapon_pickup(Vector3(58.0, _height_at(58.0, -72.0), -72.0), "weapon_smg")
+
+func _drop_weapon_pickup(position: Vector3, weapon_id: String) -> void:
+	var pickup := Node3D.new()
+	pickup.name = "WeaponPickup_" + weapon_id
+	pickup.position = Vector3(position.x, _height_at(position.x, position.z) + 0.18, position.z)
+	var weapon_mesh := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.18, 0.12, 0.78)
+	weapon_mesh.mesh = mesh
+	weapon_mesh.material_override = _make_material(Color(0.16, 0.20, 0.18), 0.45, 0.5)
+	pickup.add_child(weapon_mesh)
+	var marker := MeshInstance3D.new()
+	var marker_mesh := SphereMesh.new()
+	marker_mesh.radius = 0.12
+	marker_mesh.height = 0.24
+	marker.mesh = marker_mesh
+	marker.position.y = 0.24
+	var marker_material := StandardMaterial3D.new()
+	marker_material.albedo_color = Color(0.95, 0.72, 0.24)
+	marker_material.emission_enabled = true
+	marker_material.emission = Color(0.95, 0.58, 0.12)
+	marker.material_override = marker_material
+	pickup.add_child(marker)
+	var label := Label3D.new()
+	label.text = _weapon_display_name(weapon_id) + "\nPEGAR"
+	label.font_size = 24
+	label.position.y = 0.65
+	label.modulate = Color(1.0, 0.84, 0.48)
+	pickup.add_child(label)
+	add_child(pickup)
+	weapon_pickups.append({"node":pickup, "id":weapon_id})
+
+func _pickup_weapon(index: int) -> void:
+	if index < 0 or index >= weapon_pickups.size():
+		return
+	var data: Dictionary = weapon_pickups[index]
+	var weapon_id := str(data["id"])
+	if not unlocked_items.has(weapon_id):
+		unlocked_items.append(weapon_id)
+	equipped_items["weapon"] = weapon_id
+	for item in _shop_catalog():
+		if str(item["id"]) == weapon_id:
+			weapon_damage = float(item.get("damage", 50.0))
+			break
+	var pickup_node := data["node"] as Node3D
+	if is_instance_valid(pickup_node):
+		pickup_node.queue_free()
+	weapon_pickups.remove_at(index)
+	_save_profile()
+	status_label.text = "%s COLETADA E EQUIPADA" % _weapon_display_name(weapon_id)
+
 func _reload_rifle() -> void:
-	if equipped_items.get("weapon", "") != "weapon_rifle":
-		status_label.text = "EQUIPE O RIFLE NA LOJA"
+	if not str(equipped_items.get("weapon", "")).begins_with("weapon_") or equipped_items.get("weapon", "") in ["weapon_fists", "weapon_knife", "weapon_axe"]:
+		status_label.text = "EQUIPE UMA ARMA DE FOGO"
 		return
 	if rifle_reloading or rifle_ammo >= 30 or rifle_reserve <= 0:
 		return
@@ -2555,7 +2647,11 @@ func _shop_catalog() -> Array[Dictionary]:
 		{"id":"weapon_fists","category":"armas","name":"Combate corpo a corpo","description":"Dano básico: 50","price":0,"kind":"weapon","damage":50.0},
 		{"id":"weapon_knife","category":"armas","name":"Faca de sobrevivência","description":"Dano corpo a corpo: 75","price":250,"kind":"weapon","damage":75.0},
 		{"id":"weapon_axe","category":"armas","name":"Machado tático","description":"Dano corpo a corpo: 110","price":500,"kind":"weapon","damage":110.0},
-		{"id":"weapon_rifle","category":"armas","name":"Rifle de patrulha","description":"Arma de longo alcance; carregador 30, reserva 120","price":1400,"kind":"weapon","damage":42.0},
+		{"id":"weapon_pistol","category":"armas","name":"Pistola 9 mm","description":"Semiautomática equilibrada; dano 34","price":450,"kind":"weapon","damage":34.0},
+		{"id":"weapon_smg","category":"armas","name":"Submetralhadora","description":"Disparo rápido e alcance curto; dano 22","price":1100,"kind":"weapon","damage":22.0},
+		{"id":"weapon_shotgun","category":"armas","name":"Escopeta","description":"Múltiplos projéteis e alto dano próximo; dano 18 por chumbo","price":1250,"kind":"weapon","damage":18.0},
+		{"id":"weapon_rifle","category":"armas","name":"Rifle de patrulha","description":"Precisão e alcance intermediário; dano 42","price":1400,"kind":"weapon","damage":42.0},
+		{"id":"weapon_sniper","category":"armas","name":"Rifle de precisão","description":"Grande alcance e alto dano; dano 105","price":2400,"kind":"weapon","damage":105.0},
 		{"id":"vehicle_none","category":"veículos","name":"A pé","description":"Deslocamento padrão","price":0,"kind":"vehicle"},
 		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Veículo leve para exploração e transporte","price":900,"kind":"vehicle"},
 		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Veículo rápido para trilhas","price":1200,"kind":"vehicle"},
