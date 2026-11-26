@@ -12,6 +12,11 @@ var move_touch := Vector2.ZERO
 var look_touch := Vector2.ZERO
 var active_move_touch := -1
 var active_look_touch := -1
+var mobile_joystick_base: Panel
+var mobile_joystick_knob: Panel
+var mobile_joystick_center := Vector2.ZERO
+var mobile_menu_panel: PanelContainer
+var mobile_menu_button: Button
 var jump_requested := false
 var attack_requested := false
 var _touch_move := Vector2.ZERO
@@ -2843,236 +2848,227 @@ func _update_mission_hud() -> void:
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
+	layer.layer = 5
 	add_child(layer)
+
+	# HUD principal compacto: notificações e barras permanecem sempre visíveis.
 	status_label = Label.new()
-	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%%  |  INFECTADOS %d  |  HOSTIS %d" % [_alive_enemy_count(), _alive_hostile_count()]
-	status_label.position = Vector2(22, 18)
-	status_label.add_theme_font_size_override("font_size", 18)
-	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
+	status_label.text = "O ÚLTIMO REFÚGIO"
+	status_label.position = Vector2(14, 10)
+	status_label.size = Vector2(300, 34)
+	status_label.add_theme_font_size_override("font_size", 15)
+	status_label.add_theme_color_override("font_color", Color(0.92, 0.95, 0.84))
+	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	layer.add_child(status_label)
+
 	health_bar = ProgressBar.new()
 	health_bar.min_value = 0
 	health_bar.max_value = 100
 	health_bar.value = player_health
 	health_bar.show_percentage = true
-	health_bar.custom_minimum_size = Vector2(210, 18)
-	health_bar.position = Vector2(22, 76)
+	health_bar.custom_minimum_size = Vector2(178, 16)
+	health_bar.position = Vector2(14, 43)
 	layer.add_child(health_bar)
+
 	stamina_bar = ProgressBar.new()
 	stamina_bar.min_value = 0
 	stamina_bar.max_value = 100
 	stamina_bar.value = stamina
 	stamina_bar.show_percentage = false
-	stamina_bar.custom_minimum_size = Vector2(150, 12)
-	stamina_bar.position = Vector2(244, 79)
-	stamina_bar.modulate = Color(0.72, 0.88, 0.62)
+	stamina_bar.custom_minimum_size = Vector2(126, 10)
+	stamina_bar.position = Vector2(14, 64)
+	stamina_bar.modulate = Color(0.72, 0.9, 0.58)
 	layer.add_child(stamina_bar)
+
+	ammo_label = Label.new()
+	ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
+	ammo_label.position = Vector2(14, 80)
+	ammo_label.add_theme_font_size_override("font_size", 12)
+	ammo_label.add_theme_color_override("font_color", Color(0.96, 0.84, 0.55))
+	layer.add_child(ammo_label)
+
+	# Joystick visual fixo no canto inferior esquerdo.
+	mobile_joystick_base = Panel.new()
+	mobile_joystick_base.name = "MobileJoystickBase"
+	mobile_joystick_base.custom_minimum_size = Vector2(148, 148)
+	mobile_joystick_base.size = Vector2(148, 148)
+	mobile_joystick_base.anchor_left = 0.0
+	mobile_joystick_base.anchor_right = 0.0
+	mobile_joystick_base.anchor_top = 1.0
+	mobile_joystick_base.anchor_bottom = 1.0
+	mobile_joystick_base.offset_left = 22
+	mobile_joystick_base.offset_right = 170
+	mobile_joystick_base.offset_top = -174
+	mobile_joystick_base.offset_bottom = -26
+	mobile_joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var base_style := StyleBoxFlat.new()
+	base_style.bg_color = Color(0.07, 0.10, 0.09, 0.42)
+	base_style.border_color = Color(0.78, 0.88, 0.72, 0.65)
+	base_style.set_border_width_all(2)
+	base_style.set_corner_radius_all(74)
+	mobile_joystick_base.add_theme_stylebox_override("panel", base_style)
+	layer.add_child(mobile_joystick_base)
+
+	mobile_joystick_knob = Panel.new()
+	mobile_joystick_knob.name = "MobileJoystickKnob"
+	mobile_joystick_knob.size = Vector2(54, 54)
+	mobile_joystick_knob.position = Vector2(47, 47)
+	mobile_joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var knob_style := StyleBoxFlat.new()
+	knob_style.bg_color = Color(0.72, 0.83, 0.65, 0.82)
+	knob_style.border_color = Color(0.94, 0.98, 0.88, 0.9)
+	knob_style.set_border_width_all(2)
+	knob_style.set_corner_radius_all(27)
+	mobile_joystick_knob.add_theme_stylebox_override("panel", knob_style)
+	mobile_joystick_base.add_child(mobile_joystick_knob)
+	mobile_joystick_center = Vector2(96, 96)
+
+	# Ações essenciais agrupadas na mão direita.
+	_make_corner_button(layer, "ATACAR", -112, -20, -112, -20, func(): attack_requested = true, Vector2(92, 92), 16)
+	_make_corner_button(layer, "PULAR", -206, -132, -94, -20, func(): jump_requested = true, Vector2(72, 72), 13)
+	_make_corner_button(layer, "ESQUIVA", -206, -132, -174, -102, func(): dodge_requested = true, Vector2(72, 72), 11)
+	_make_corner_button(layer, "USAR", -300, -218, -94, -20, _interact_with_wilderness, Vector2(76, 72), 12)
+	_make_corner_button(layer, "CORRER", -300, -218, -174, -102, _toggle_sprint, Vector2(76, 72), 11)
+
+	# Informações e ações secundárias ficam dentro de um único menu recolhível.
+	mobile_menu_button = Button.new()
+	mobile_menu_button.text = "☰"
+	mobile_menu_button.tooltip_text = "Abrir menu"
+	mobile_menu_button.custom_minimum_size = Vector2(52, 48)
+	mobile_menu_button.anchor_left = 1.0
+	mobile_menu_button.anchor_right = 1.0
+	mobile_menu_button.anchor_top = 0.0
+	mobile_menu_button.anchor_bottom = 0.0
+	mobile_menu_button.offset_left = -66
+	mobile_menu_button.offset_right = -14
+	mobile_menu_button.offset_top = 12
+	mobile_menu_button.offset_bottom = 60
+	mobile_menu_button.focus_mode = Control.FOCUS_NONE
+	mobile_menu_button.pressed.connect(_toggle_mobile_menu)
+	layer.add_child(mobile_menu_button)
+
+	mobile_menu_panel = PanelContainer.new()
+	mobile_menu_panel.name = "MobileUtilityMenu"
+	mobile_menu_panel.anchor_left = 1.0
+	mobile_menu_panel.anchor_right = 1.0
+	mobile_menu_panel.anchor_top = 0.0
+	mobile_menu_panel.anchor_bottom = 0.0
+	mobile_menu_panel.offset_left = -244
+	mobile_menu_panel.offset_right = -14
+	mobile_menu_panel.offset_top = 68
+	mobile_menu_panel.offset_bottom = 570
+	mobile_menu_panel.visible = false
+	layer.add_child(mobile_menu_panel)
+	var menu_box := VBoxContainer.new()
+	menu_box.add_theme_constant_override("separation", 5)
+	mobile_menu_panel.add_child(menu_box)
+
+	wallet_label = Label.new()
+	wallet_label.text = "CRÉDITOS: %d" % credits
+	menu_box.add_child(wallet_label)
+	wave_label = Label.new()
+	menu_box.add_child(wave_label)
+	_update_wave_hud()
+	mission_label = Label.new()
+	menu_box.add_child(mission_label)
+	_update_mission_hud()
+	resource_label = Label.new()
+	resource_label.text = "MADEIRA %d | SUCATA %d | COMIDA %d" % [wood, scrap, food]
+	menu_box.add_child(resource_label)
+	world_clock_label = Label.new()
+	menu_box.add_child(world_clock_label)
+	_update_world_clock_hud()
+	shelter_label = Label.new()
+	menu_box.add_child(shelter_label)
+	_update_shelter_hud()
+
+	vehicle_toggle_button = _make_menu_button(menu_box, "ENTRAR NO VEÍCULO", _toggle_vehicle)
+	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
+	boat_toggle_button = _make_menu_button(menu_box, "USAR / SAIR DO BARCO", _toggle_boat)
+	wilderness_button = _make_menu_button(menu_box, "INTERAGIR COM O AMBIENTE", _interact_with_wilderness)
+	_make_menu_button(menu_box, "COLETAR RECURSOS", _collect_nearby_resource)
+	_make_menu_button(menu_box, "USAR KIT MÉDICO", _use_medkit)
+	_make_menu_button(menu_box, "RECARREGAR ARMA", _reload_rifle)
+	_make_menu_button(menu_box, "CONSTRUIR BARRICADA", _build_barricade)
+	_make_menu_button(menu_box, "MELHORAR REFÚGIO", _upgrade_shelter)
+	sprint_button = _make_menu_button(menu_box, "CORRER: OFF", _toggle_sprint)
+	crouch_button = _make_menu_button(menu_box, "AGACHAR: OFF", _toggle_crouch)
+	_make_menu_button(menu_box, "LOJA / INVENTÁRIO", _toggle_shop)
+	_make_menu_button(menu_box, "FECHAR MENU", _toggle_mobile_menu)
+
 	game_over_label = Label.new()
 	game_over_label.text = "VOCÊ FOI DERROTADO"
 	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	game_over_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	game_over_label.add_theme_font_size_override("font_size", 34)
+	game_over_label.add_theme_font_size_override("font_size", 30)
 	game_over_label.add_theme_color_override("font_color", Color(0.95, 0.82, 0.68))
 	game_over_label.anchor_left = 0.5
 	game_over_label.anchor_right = 0.5
 	game_over_label.anchor_top = 0.5
 	game_over_label.anchor_bottom = 0.5
-	game_over_label.offset_left = -220
-	game_over_label.offset_right = 220
-	game_over_label.offset_top = -90
+	game_over_label.offset_left = -180
+	game_over_label.offset_right = 180
+	game_over_label.offset_top = -70
 	game_over_label.offset_bottom = -20
 	game_over_label.visible = false
 	layer.add_child(game_over_label)
+
 	restart_button = Button.new()
 	restart_button.text = "JOGAR NOVAMENTE"
-	restart_button.custom_minimum_size = Vector2(220, 58)
+	restart_button.custom_minimum_size = Vector2(210, 54)
 	restart_button.anchor_left = 0.5
 	restart_button.anchor_right = 0.5
 	restart_button.anchor_top = 0.5
 	restart_button.anchor_bottom = 0.5
-	restart_button.offset_left = -110
-	restart_button.offset_right = 110
-	restart_button.offset_top = 5
-	restart_button.offset_bottom = 63
+	restart_button.offset_left = -105
+	restart_button.offset_right = 105
+	restart_button.offset_top = 8
+	restart_button.offset_bottom = 62
 	restart_button.visible = false
 	restart_button.pressed.connect(func(): get_tree().reload_current_scene())
 	layer.add_child(restart_button)
-	var hint := Label.new()
-	hint.text = "WASD: mover  •  Espaço: pular  •  F: atacar  •  Toque esquerdo: mover  •  Arraste direito: câmera"
-	hint.position = Vector2(22, 48)
-	hint.add_theme_font_size_override("font_size", 13)
-	hint.add_theme_color_override("font_color", Color(0.75, 0.79, 0.70))
-	layer.add_child(hint)
-	boat_toggle_button = Button.new()
-	boat_toggle_button.text = "USAR BARCO"
-	boat_toggle_button.custom_minimum_size = Vector2(132, 54)
-	boat_toggle_button.anchor_left = 1.0
-	boat_toggle_button.anchor_right = 1.0
-	boat_toggle_button.anchor_top = 1.0
-	boat_toggle_button.anchor_bottom = 1.0
-	boat_toggle_button.offset_left = -300
-	boat_toggle_button.offset_right = -160
-	boat_toggle_button.offset_top = -155
-	boat_toggle_button.offset_bottom = -95
-	boat_toggle_button.pressed.connect(_toggle_boat)
-	layer.add_child(boat_toggle_button)
-	wilderness_button = Button.new()
-	wilderness_button.text = "INTERAGIR"
-	wilderness_button.custom_minimum_size = Vector2(132, 54)
-	wilderness_button.anchor_left = 1.0
-	wilderness_button.anchor_right = 1.0
-	wilderness_button.anchor_top = 1.0
-	wilderness_button.anchor_bottom = 1.0
-	wilderness_button.offset_left = -300
-	wilderness_button.offset_right = -160
-	wilderness_button.offset_top = -88
-	wilderness_button.offset_bottom = -28
-	wilderness_button.pressed.connect(_interact_with_wilderness)
-	layer.add_child(wilderness_button)
-	var jump_button := Button.new()
-	jump_button.text = "VOAR / POUSAR"
-	jump_button.custom_minimum_size = Vector2(112, 58)
-	jump_button.anchor_left = 1.0
-	jump_button.anchor_right = 1.0
-	jump_button.anchor_top = 1.0
-	jump_button.anchor_bottom = 1.0
-	jump_button.offset_left = -144
-	jump_button.offset_right = -24
-	jump_button.offset_top = -158
-	jump_button.offset_bottom = -94
-	jump_button.pressed.connect(func(): jump_requested = true)
-	layer.add_child(jump_button)
-	sprint_button = Button.new()
-	sprint_button.text = "CORRER: OFF"
-	sprint_button.custom_minimum_size = Vector2(112, 54)
-	sprint_button.anchor_left = 1.0
-	sprint_button.anchor_right = 1.0
-	sprint_button.anchor_top = 1.0
-	sprint_button.anchor_bottom = 1.0
-	sprint_button.offset_left = -300
-	sprint_button.offset_right = -160
-	sprint_button.offset_top = -230
-	sprint_button.offset_bottom = -170
-	sprint_button.pressed.connect(_toggle_sprint)
-	layer.add_child(sprint_button)
-	crouch_button = Button.new()
-	crouch_button.text = "AGACHAR: OFF"
-	crouch_button.custom_minimum_size = Vector2(112, 52)
-	crouch_button.anchor_left = 1.0
-	crouch_button.anchor_right = 1.0
-	crouch_button.anchor_top = 1.0
-	crouch_button.anchor_bottom = 1.0
-	crouch_button.offset_left = -300
-	crouch_button.offset_right = -160
-	crouch_button.offset_top = -300
-	crouch_button.offset_bottom = -242
-	crouch_button.pressed.connect(_toggle_crouch)
-	layer.add_child(crouch_button)
-	var dodge_button := Button.new()
-	dodge_button.text = "ESQUIVAR"
-	dodge_button.custom_minimum_size = Vector2(118, 52)
-	dodge_button.position = Vector2(22, 430)
-	dodge_button.pressed.connect(func(): dodge_requested = true)
-	layer.add_child(dodge_button)
-	wallet_label = Label.new()
-	wallet_label.text = "CRÉDITOS: %d" % credits
-	wallet_label.position = Vector2(22, 102)
-	wallet_label.add_theme_font_size_override("font_size", 17)
-	wallet_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.32))
-	layer.add_child(wallet_label)
-	wave_label = Label.new()
-	wave_label.position = Vector2(22, 126)
-	wave_label.add_theme_font_size_override("font_size", 15)
-	wave_label.add_theme_color_override("font_color", Color(0.92, 0.55, 0.32))
-	layer.add_child(wave_label)
-	_update_wave_hud()
-	mission_label = Label.new()
-	mission_label.position = Vector2(22, 148)
-	mission_label.add_theme_font_size_override("font_size", 15)
-	mission_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
-	layer.add_child(mission_label)
-	_update_mission_hud()
-	resource_label = Label.new()
-	resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d  |  MED %d" % [wood, scrap, food, medical_supplies]
-	resource_label.position = Vector2(22, 170)
-	resource_label.add_theme_font_size_override("font_size", 14)
-	resource_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.68))
-	layer.add_child(resource_label)
-	ammo_label = Label.new()
-	ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
-	ammo_label.position = Vector2(22, 216)
-	ammo_label.add_theme_font_size_override("font_size", 14)
-	ammo_label.add_theme_color_override("font_color", Color(0.92, 0.78, 0.48))
-	layer.add_child(ammo_label)
-	var reload_button := Button.new()
-	reload_button.text = "RECARREGAR"
-	reload_button.custom_minimum_size = Vector2(132, 42)
-	reload_button.position = Vector2(22, 396)
-	reload_button.pressed.connect(_reload_rifle)
-	layer.add_child(reload_button)
-	var collect_button := Button.new()
-	collect_button.text = "COLETAR"
-	collect_button.custom_minimum_size = Vector2(120, 44)
-	collect_button.position = Vector2(22, 294)
-	collect_button.pressed.connect(_collect_nearby_resource)
-	layer.add_child(collect_button)
-	var medkit_button := Button.new()
-	medkit_button.text = "USAR KIT MÉDICO"
-	medkit_button.custom_minimum_size = Vector2(150, 44)
-	medkit_button.position = Vector2(22, 344)
-	medkit_button.pressed.connect(_use_medkit)
-	layer.add_child(medkit_button)
-	var build_button := Button.new()
-	build_button.text = "CONSTRUIR BARRICADA"
-	build_button.custom_minimum_size = Vector2(190, 44)
-	build_button.position = Vector2(22, 344)
-	build_button.pressed.connect(_build_barricade)
-	layer.add_child(build_button)
-	var shelter_button := Button.new()
-	shelter_button.text = "MELHORAR REFÚGIO"
-	shelter_button.custom_minimum_size = Vector2(190, 44)
-	shelter_button.position = Vector2(222, 344)
-	shelter_button.pressed.connect(_upgrade_shelter)
-	layer.add_child(shelter_button)
-	shelter_label = Label.new()
-	shelter_label.position = Vector2(222, 394)
-	shelter_label.add_theme_font_size_override("font_size", 14)
-	shelter_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
-	layer.add_child(shelter_label)
-	_update_shelter_hud()
-	world_clock_label = Label.new()
-	world_clock_label.position = Vector2(22, 194)
-	world_clock_label.add_theme_font_size_override("font_size", 14)
-	world_clock_label.add_theme_color_override("font_color", Color(0.91, 0.86, 0.66))
-	layer.add_child(world_clock_label)
-	_update_world_clock_hud()
-	vehicle_toggle_button = Button.new()
-	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
-	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
-	vehicle_toggle_button.custom_minimum_size = Vector2(190, 42)
-	vehicle_toggle_button.position = Vector2(22, 240)
-	vehicle_toggle_button.pressed.connect(_toggle_vehicle)
-	layer.add_child(vehicle_toggle_button)
-	var shop_button := Button.new()
-	shop_button.text = "LOJA / INVENTÁRIO"
-	shop_button.custom_minimum_size = Vector2(190, 48)
-	shop_button.position = Vector2(22, 186)
-	shop_button.pressed.connect(_toggle_shop)
-	layer.add_child(shop_button)
-	var attack_button := Button.new()
-	attack_button.text = "ATACAR"
-	attack_button.custom_minimum_size = Vector2(112, 58)
-	attack_button.anchor_left = 1.0
-	attack_button.anchor_right = 1.0
-	attack_button.anchor_top = 1.0
-	attack_button.anchor_bottom = 1.0
-	attack_button.offset_left = -144
-	attack_button.offset_right = -24
-	attack_button.offset_top = -82
-	attack_button.offset_bottom = -18
-	attack_button.pressed.connect(func(): attack_requested = true)
-	layer.add_child(attack_button)
+
 	_build_shop_ui(layer)
+
+
+func _make_menu_button(parent: VBoxContainer, caption: String, action: Callable) -> Button:
+	var button := Button.new()
+	button.text = caption
+	button.custom_minimum_size = Vector2(0, 34)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(action)
+	parent.add_child(button)
+	return button
+
+
+func _make_corner_button(parent: CanvasLayer, caption: String, left: float, right: float, top: float, bottom: float, action: Callable, minimum: Vector2, font_size: int) -> Button:
+	var button := Button.new()
+	button.text = caption
+	button.custom_minimum_size = minimum
+	button.anchor_left = 1.0
+	button.anchor_right = 1.0
+	button.anchor_top = 1.0
+	button.anchor_bottom = 1.0
+	button.offset_left = left
+	button.offset_right = right
+	button.offset_top = top
+	button.offset_bottom = bottom
+	button.add_theme_font_size_override("font_size", font_size)
+	button.focus_mode = Control.FOCUS_NONE
+	button.pressed.connect(action)
+	parent.add_child(button)
+	return button
+
+
+func _toggle_mobile_menu() -> void:
+	if not is_instance_valid(mobile_menu_panel):
+		return
+	mobile_menu_panel.visible = not mobile_menu_panel.visible
+	if is_instance_valid(mobile_menu_button):
+		mobile_menu_button.text = "×" if mobile_menu_panel.visible else "☰"
+
+
 
 func _load_profile() -> void:
 	var config := ConfigFile.new()
@@ -3677,27 +3673,38 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_interact_with_wilderness()
 	if event is InputEventScreenTouch:
+		var viewport_size := get_viewport().get_visible_rect().size
 		if event.pressed:
-			if event.position.x < get_viewport().get_visible_rect().size.x * 0.48 and event.position.y > get_viewport().get_visible_rect().size.y * 0.35:
+			if event.position.x < viewport_size.x * 0.48 and event.position.y > viewport_size.y * 0.48:
 				active_move_touch = event.index
-				move_touch = event.position
-			else:
+				var center := Vector2(96.0, viewport_size.y - 100.0)
+				var stick_delta: Vector2 = event.position - center
+				_update_mobile_joystick(stick_delta)
+			elif event.position.x > viewport_size.x * 0.50:
 				active_look_touch = event.index
-				look_touch = event.position
 		else:
 			if event.index == active_move_touch:
 				active_move_touch = -1
 				move_touch = Vector2.ZERO
 				_touch_move = Vector2.ZERO
+				_update_mobile_joystick(Vector2.ZERO)
 			if event.index == active_look_touch:
 				active_look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == active_move_touch:
-			var delta: Vector2 = event.position - move_touch
-			_touch_move = Vector2(clampf(delta.x / 72.0, -1.0, 1.0), clampf(delta.y / 72.0, -1.0, 1.0))
+			var center := Vector2(96.0, get_viewport().get_visible_rect().size.y - 100.0)
+			_update_mobile_joystick(event.position - center)
 		elif event.index == active_look_touch:
-			camera_pivot.rotation.y -= event.relative.x * 0.004
-			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
+			camera_pivot.rotation.y -= event.relative.x * 0.0045
+			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.0035, -0.85, 0.15)
+
+
+func _update_mobile_joystick(delta: Vector2) -> void:
+	var radius := 58.0
+	var limited := delta.limit_length(radius)
+	_touch_move = Vector2(limited.x / radius, limited.y / radius)
+	if is_instance_valid(mobile_joystick_knob):
+		mobile_joystick_knob.position = Vector2(47.0, 47.0) + limited * (48.0 / radius)
 
 
 func _spawn_allied_survivors() -> void:
