@@ -1040,9 +1040,9 @@ func _interact_with_wilderness() -> void:
 		(cache_data["node"] as Node3D).visible = false
 		_save_profile()
 		collect_cooldown = 0.6
-		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS MÉDICOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine]if is_instance_valid(ammo_label):
+		if is_instance_valid(ammo_label):
 			ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
-		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS, +%d MUNIÇÃO" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine, found_ammo]
+		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS MÉDICOS, +%d MUNIÇÃO" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine, found_ammo]
 		return
 	var nearest_resource := 999.0
 	for data in resource_nodes:
