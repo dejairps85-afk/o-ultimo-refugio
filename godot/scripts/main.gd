@@ -79,7 +79,7 @@ var alien_ufo: Node3D
 var alien_wreck: Node3D
 var alien_story_found := false
 var alien_flight_phase := 0.0
-var alien_story_label: Label
+var alien_story_label: Label3D
 var alien_guards: Array[Dictionary] = []
 
 var accessory_visual: Node3D
@@ -2089,7 +2089,7 @@ func _spawn_hostile_factions() -> void:
 			var point: Vector2 = camp["center"] + Vector2(rng.randf_range(-5.0, 5.0), rng.randf_range(-5.0, 5.0))
 			human.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
 			add_child(human)
-			var hostile_weapon := ["weapon_pistol", "weapon_smg", "weapon_shotgun", "weapon_rifle"][rng.randi_range(0, 3)]
+			var hostile_weapon: String = ["weapon_pistol", "weapon_smg", "weapon_shotgun", "weapon_rifle"][rng.randi_range(0, 3)]
 			hostile_humans.append({
 				"node": human, "weapon_id": hostile_weapon, "faction": str(camp["name"]), "health": float(camp["health"]), "health_mesh": health_fill, "health_green": health_green, "health_orange": health_orange, "health_red": health_red,
 				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
@@ -2397,8 +2397,8 @@ func _update_infected(delta: float) -> void:
 				infected.velocity.y -= 19.0 * delta
 			infected.move_and_slide()
 			continue
-		var pursuit_target := player.global_position if not territorial_dormant else enemy_data.get("investigate_position", player.global_position)
-		var pursuit_offset := pursuit_target - infected.global_position
+		var pursuit_target: Vector3 = player.global_position if not territorial_dormant else enemy_data.get("investigate_position", player.global_position)
+		var pursuit_offset: Vector3 = pursuit_target - infected.global_position
 		var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 		if pursuit_distance > 1.55:
 			var direction := _steer_around_obstacles(infected.global_position, pursuit_target)
