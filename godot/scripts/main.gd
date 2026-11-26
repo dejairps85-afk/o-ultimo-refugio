@@ -20,6 +20,7 @@ var rng := RandomNumberGenerator.new()
 var status_label: Label
 var health_bar: ProgressBar
 var enemies: Array = []
+var environment_obstacles: Array[Dictionary] = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
 var player_attack_cooldown := 0.0
@@ -159,6 +160,7 @@ func _scatter_environment() -> void:
 			instance = _procedural_tree()
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
+		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.45 * instance.scale.x})
 		_add_tree_collision(instance)
 		add_child(instance)
 	for i in range(42):
@@ -174,6 +176,7 @@ func _scatter_environment() -> void:
 			instance = _procedural_rock()
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
+		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.0 * instance.scale.x})
 		_add_rock_collision(instance)
 		add_child(instance)
 	for i in range(7):
@@ -185,6 +188,7 @@ func _scatter_environment() -> void:
 				stump.scale = Vector3.ONE * rng.randf_range(0.7, 1.15)
 				stump.position = Vector3(x, _height_at(x, z), z)
 				stump.rotation.y = rng.randf_range(0.0, TAU)
+				environment_obstacles.append({"position": Vector2(x, z), "radius": 0.85 * stump.scale.x})
 				_add_stump_collision(stump)
 				add_child(stump)
 	for i in range(80):
@@ -405,6 +409,22 @@ func _spawn_infected() -> void:
 		_play_best_animation(animator, ["idle", "walk", "move"])
 		enemies.append({"node": enemy, "anim": animator, "health": 100.0, "speed": rng.randf_range(1.0, 1.8), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
 
+func _steer_around_obstacles(from_position: Vector3, target_position: Vector3) -> Vector3:
+	var desired := Vector3(target_position.x - from_position.x, 0.0, target_position.z - from_position.z).normalized()
+	var avoidance := Vector3.ZERO
+	var current := Vector2(from_position.x, from_position.z)
+	for obstacle in environment_obstacles:
+		var offset: Vector2 = current - obstacle["position"]
+		var distance := offset.length()
+		var safe_distance: float = float(obstacle["radius"]) + 1.35
+		if distance < safe_distance and distance > 0.05:
+			var strength := 1.0 - distance / safe_distance
+			avoidance += Vector3(offset.x, 0.0, offset.y).normalized() * strength * 1.8
+	var result := desired + avoidance
+	if result.length() < 0.05:
+		return desired
+	return result.normalized()
+
 func _update_infected(delta: float) -> void:
 	for enemy_data in enemies:
 		if not enemy_data["alive"]:
@@ -415,7 +435,7 @@ func _update_infected(delta: float) -> void:
 		var to_player := player.global_position - infected.global_position
 		var distance := Vector2(to_player.x, to_player.z).length()
 		if distance > 1.35:
-			var direction := Vector3(to_player.x, 0.0, to_player.z).normalized()
+			var direction := _steer_around_obstacles(infected.global_position, player.global_position)
 			infected.position.x += direction.x * float(enemy_data["speed"]) * delta
 			infected.position.z += direction.z * float(enemy_data["speed"]) * delta
 			infected.rotation.y = lerp_angle(infected.rotation.y, atan2(-direction.x, -direction.z), delta * 3.0)
