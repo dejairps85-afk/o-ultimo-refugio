@@ -1,0 +1,6 @@
+Rock Moss Set 01
+Autor: Kless Gyzen
+Fonte: https://polyhaven.com/a/rock_moss_set_01
+Licenca: CC0 1.0 Universal
+Arquivo: rock_moss_set_01_mobile.glb
+Processamento: simplificacao de geometria e otimizacao para dispositivos moveis.
