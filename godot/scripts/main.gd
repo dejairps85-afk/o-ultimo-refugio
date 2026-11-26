@@ -1678,11 +1678,25 @@ func _spawn_hostile_factions() -> void:
 			label.position.y = 2.35
 			label.modulate = Color(1.0, 0.68, 0.48)
 			human.add_child(label)
+			var health_back := MeshInstance3D.new()
+			var health_back_mesh := BoxMesh.new()
+			health_back_mesh.size = Vector3(1.08, 0.085, 0.045)
+			health_back.mesh = health_back_mesh
+			health_back.position = Vector3(0.0, 2.52, 0.0)
+			health_back.material_override = _make_material(Color(0.055, 0.045, 0.04))
+			human.add_child(health_back)
+			var health_fill := MeshInstance3D.new()
+			var health_fill_mesh := BoxMesh.new()
+			health_fill_mesh.size = Vector3(1.0, 0.055, 0.055)
+			health_fill.mesh = health_fill_mesh
+			health_fill.position = Vector3(0.0, 2.52, -0.035)
+			health_fill.material_override = _make_material(Color(0.72, 0.16, 0.10), 0.35)
+			human.add_child(health_fill)
 			var point: Vector2 = camp["center"] + Vector2(rng.randf_range(-5.0, 5.0), rng.randf_range(-5.0, 5.0))
 			human.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
 			add_child(human)
 			hostile_humans.append({
-				"node": human, "faction": str(camp["name"]), "health": float(camp["health"]),
+				"node": human, "faction": str(camp["name"]), "health": float(camp["health"]), "health_mesh": health_fill,
 				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
 				"fire_timer": rng.randf_range(0.5, 1.8), "stagger_timer": 0.0,
 				"knockback": Vector3.ZERO, "alive": true,
@@ -1734,6 +1748,12 @@ func _update_hostile_factions(delta: float) -> void:
 		var npc := hostile["node"] as CharacterBody3D
 		if not is_instance_valid(npc):
 			continue
+		var health_ratio := clampf(float(hostile["health"]) / maxf(1.0, float(hostile["max_health"])), 0.0, 1.0)
+		var health_mesh := hostile.get("health_mesh") as MeshInstance3D
+		if is_instance_valid(health_mesh):
+			health_mesh.scale.x = maxf(0.001, health_ratio)
+			health_mesh.position.x = -(1.0 - health_ratio) * 0.5
+			health_mesh.material_override = _make_material(Color(0.18, 0.72, 0.24) if health_ratio > 0.55 else Color(0.92, 0.56, 0.12) if health_ratio > 0.25 else Color(0.88, 0.12, 0.08), 0.35)
 		var offset := player.global_position - npc.global_position
 		var distance := Vector2(offset.x, offset.z).length()
 		var noise_offset := gunshot_noise_position - npc.global_position
