@@ -71,6 +71,38 @@ jobs:
           test -s build/web/index.html
           ls -lah build/web
 
+      - name: Testar jogo em navegador virtual com WebGL
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --directory build/web >/tmp/web-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          node --input-type=module <<'NODE'
+          import { chromium } from 'playwright';
+          const browser = await chromium.launch({headless:true,args:['--enable-webgl','--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+          const page = await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:1});
+          const errors = [];
+          page.on('pageerror', e => errors.push('PAGE: '+e.message));
+          page.on('console', m => { if(m.type()==='error') errors.push('CONSOLE: '+m.text()); });
+          page.on('requestfailed', r => errors.push('REQUEST: '+r.url()+' '+r.failure()?.errorText));
+          try {
+            await page.goto('http://127.0.0.1:8765/',{waitUntil:'domcontentloaded',timeout:30000});
+            await page.waitForTimeout(45000);
+            const state = await page.evaluate(() => ({
+              title: document.title,
+              canvas: [...document.querySelectorAll('canvas')].map(c=>({width:c.width,height:c.height,clientWidth:c.clientWidth,clientHeight:c.clientHeight})),
+              bodyText: document.body.innerText.slice(0,500),
+              webgl: (()=>{const c=document.createElement('canvas'); return !!(c.getContext('webgl2')||c.getContext('webgl'));})()
+            }));
+            await page.screenshot({path:'build/web/browser-smoke.png',fullPage:false});
+            console.log('BROWSER_STATE='+JSON.stringify(state));
+            console.log('BROWSER_ERRORS='+JSON.stringify(errors));
+            if (!state.canvas.length || !state.canvas.some(c=>c.width>0 && c.height>0)) throw new Error('Godot não criou um canvas válido no Chromium.');
+            if (errors.some(e=>/wasm|webgl|uncaught|failed to load|out of memory/i.test(e))) throw new Error('Erros relevantes no navegador: '+errors.join(' | '));
+          } finally { await browser.close(); }
+          NODE
+
       - name: Publicar versão Web como artefato
         uses: actions/upload-artifact@v4
         with:
