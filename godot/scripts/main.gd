@@ -49,6 +49,14 @@ var outfit_tint := Color.WHITE
 var vehicle: CharacterBody3D
 var vehicle_active := false
 var vehicle_toggle_button: Button
+var resource_label: Label
+var wood := 0
+var scrap := 0
+var food := 0
+var resource_nodes: Array[Dictionary] = []
+var collect_requested := false
+var collect_cooldown := 0.0
+var built_structures: Array[Dictionary] = []
 
 func _ready() -> void:
 	rng.randomize()
@@ -58,6 +66,7 @@ func _ready() -> void:
 	_build_player()
 	_spawn_infected()
 	_load_profile()
+	_load_saved_buildings()
 	_apply_player_customization()
 	_build_vehicle()
 	_build_hud()
@@ -206,7 +215,7 @@ func _scatter_environment() -> void:
 		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.0 * instance.scale.x})
 		_add_rock_collision(instance)
 		add_child(instance)
-	for i in range(count):
+	for i in range(18):
 		if stump_scene:
 			var x := rng.randf_range(-92, 92)
 			var z := rng.randf_range(-92, 92)
@@ -232,6 +241,138 @@ func _scatter_environment() -> void:
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
 		add_child(instance)
+	_spawn_resource_nodes()
+
+func _spawn_resource_nodes() -> void:
+	var resource_types := ["wood", "scrap", "food"]
+	for i in range(24):
+		var kind: String = resource_types[i % resource_types.size()]
+		var angle := rng.randf_range(0.0, TAU)
+		var distance := rng.randf_range(13.0, 88.0)
+		var x := cos(angle) * distance
+		var z := sin(angle) * distance
+		var node := Node3D.new()
+		node.name = "Resource_" + kind
+		node.position = Vector3(x, _height_at(x, z), z)
+		var mesh_node := MeshInstance3D.new()
+		if kind == "wood":
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.42, 0.34, 0.85)
+			mesh_node.mesh = mesh
+			mesh_node.position.y = 0.22
+			mesh_node.rotation.y = rng.randf_range(0.0, TAU)
+			mesh_node.material_override = _make_material(Color(0.38, 0.22, 0.11))
+		elif kind == "scrap":
+			var mesh := BoxMesh.new()
+			mesh.size = Vector3(0.48, 0.42, 0.38)
+			mesh_node.mesh = mesh
+			mesh_node.position.y = 0.24
+			mesh_node.rotation_degrees = Vector3(12, rng.randf_range(0.0, 360.0), 8)
+			mesh_node.material_override = _make_material(Color(0.32, 0.37, 0.36), 0.48)
+		else:
+			var mesh := SphereMesh.new()
+			mesh.radius = 0.22
+			mesh.height = 0.42
+			mesh_node.mesh = mesh
+			mesh_node.position.y = 0.25
+			mesh_node.material_override = _make_material(Color(0.55, 0.24, 0.16))
+		node.add_child(mesh_node)
+		add_child(node)
+		resource_nodes.append({"node": node, "kind": kind, "amount": rng.randi_range(2, 4)})
+
+func _collect_nearby_resource() -> void:
+	if collect_cooldown > 0.0:
+		return
+	var nearest_index := -1
+	var nearest_distance := 2.8
+	for i in range(resource_nodes.size()):
+		var data := resource_nodes[i]
+		var node: Node3D = data["node"]
+		if not is_instance_valid(node):
+			continue
+		var distance := player.global_position.distance_to(node.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_index = i
+	if nearest_index < 0:
+		status_label.text = "NENHUM RECURSO PRÓXIMO"
+		return
+	var found: Dictionary = resource_nodes[nearest_index]
+	var amount := int(found["amount"])
+	match str(found["kind"]):
+		"wood":
+			wood += amount
+		"scrap":
+			scrap += amount
+		"food":
+			food += amount
+	(found["node"] as Node3D).queue_free()
+	resource_nodes.remove_at(nearest_index)
+	collect_cooldown = 0.45
+	_save_profile()
+	status_label.text = "RECURSO COLETADO: %s +%d" % [str(found["kind"]).to_upper(), amount]
+
+func _build_barricade() -> void:
+	if wood < 8 or scrap < 5:
+		status_label.text = "PRECISA DE 8 MADEIRAS E 5 SUCATAS"
+		return
+	var forward := -player.global_transform.basis.z
+	var build_position := player.global_position + forward * 2.8
+	build_position.y = _height_at(build_position.x, build_position.z)
+	var barricade := StaticBody3D.new()
+	barricade.name = "PlayerBarricade"
+	barricade.position = build_position
+	barricade.rotation.y = player.rotation.y
+	var plank := MeshInstance3D.new()
+	var plank_mesh := BoxMesh.new()
+	plank_mesh.size = Vector3(2.8, 1.25, 0.22)
+	plank.mesh = plank_mesh
+	plank.position.y = 0.68
+	plank.material_override = _make_material(Color(0.30, 0.19, 0.10))
+	barricade.add_child(plank)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.8, 1.25, 0.28)
+	collision.shape = shape
+	collision.position.y = 0.68
+	barricade.add_child(collision)
+	add_child(barricade)
+	wood -= 8
+	scrap -= 5
+	built_structures.append({"x": build_position.x, "z": build_position.z, "rotation": player.rotation.y})
+	_save_profile()
+	_save_buildings()
+	status_label.text = "BARRICADA CONSTRUÍDA: REFÚGIO FORTIFICADO"
+
+func _save_buildings() -> void:
+	var config := ConfigFile.new()
+	config.set_value("world", "barricades", built_structures)
+	config.save("user://survivor_world.cfg")
+
+func _load_saved_buildings() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://survivor_world.cfg") != OK:
+		return
+	built_structures = config.get_value("world", "barricades", [])
+	for data in built_structures:
+		var barricade := StaticBody3D.new()
+		barricade.name = "SavedBarricade"
+		barricade.position = Vector3(float(data["x"]), _height_at(float(data["x"]), float(data["z"])), float(data["z"]))
+		barricade.rotation.y = float(data["rotation"])
+		var plank := MeshInstance3D.new()
+		var plank_mesh := BoxMesh.new()
+		plank_mesh.size = Vector3(2.8, 1.25, 0.22)
+		plank.mesh = plank_mesh
+		plank.position.y = 0.68
+		plank.material_override = _make_material(Color(0.30, 0.19, 0.10))
+		barricade.add_child(plank)
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = Vector3(2.8, 1.25, 0.28)
+		collision.shape = shape
+		collision.position.y = 0.68
+		barricade.add_child(collision)
+		add_child(barricade)
 
 func _add_tree_collision(root: Node3D) -> void:
 	var body := StaticBody3D.new()
@@ -415,7 +556,7 @@ func _spawn_infected(count: int = 7) -> void:
 		"res://assets/models/infected/zombie-runner.glb",
 		"res://assets/models/infected/zombie-brute.glb"
 	]
-	for i in range(7):
+	for i in range(count):
 		var variant_path: String = variants[i % variants.size()]
 		if not ResourceLoader.exists(variant_path):
 			continue
@@ -644,6 +785,24 @@ func _build_hud() -> void:
 	mission_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
 	layer.add_child(mission_label)
 	_update_mission_hud()
+	resource_label = Label.new()
+	resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d" % [wood, scrap, food]
+	resource_label.position = Vector2(22, 170)
+	resource_label.add_theme_font_size_override("font_size", 14)
+	resource_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.68))
+	layer.add_child(resource_label)
+	var collect_button := Button.new()
+	collect_button.text = "COLETAR"
+	collect_button.custom_minimum_size = Vector2(120, 44)
+	collect_button.position = Vector2(22, 294)
+	collect_button.pressed.connect(_collect_nearby_resource)
+	layer.add_child(collect_button)
+	var build_button := Button.new()
+	build_button.text = "CONSTRUIR BARRICADA"
+	build_button.custom_minimum_size = Vector2(190, 44)
+	build_button.position = Vector2(22, 344)
+	build_button.pressed.connect(_build_barricade)
+	layer.add_child(build_button)
 	vehicle_toggle_button = Button.new()
 	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
 	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
@@ -680,6 +839,9 @@ func _load_profile() -> void:
 		equipped_items = config.get_value("profile", "equipped", equipped_items)
 		mission_kills = int(config.get_value("profile", "mission_kills", 0))
 		mission_reward_claimed = bool(config.get_value("profile", "mission_reward_claimed", false))
+		wood = int(config.get_value("profile", "wood", 0))
+		scrap = int(config.get_value("profile", "scrap", 0))
+		food = int(config.get_value("profile", "food", 0))
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
@@ -688,10 +850,15 @@ func _save_profile() -> void:
 	config.set_value("profile", "equipped", equipped_items)
 	config.set_value("profile", "mission_kills", mission_kills)
 	config.set_value("profile", "mission_reward_claimed", mission_reward_claimed)
+	config.set_value("profile", "wood", wood)
+	config.set_value("profile", "scrap", scrap)
+	config.set_value("profile", "food", food)
 	config.save("user://survivor_profile.cfg")
 	if wallet_label:
 		wallet_label.text = "CRÉDITOS: %d" % credits
 	_update_mission_hud()
+	if is_instance_valid(resource_label):
+		resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d" % [wood, scrap, food]
 
 func _shop_catalog() -> Array[Dictionary]:
 	return [
@@ -973,6 +1140,8 @@ func _apply_player_customization() -> void:
 		accessory_visual.add_child(weapon_mesh)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
+		_collect_nearby_resource()
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if event.position.x < get_viewport().get_visible_rect().size.x * 0.48 and event.position.y > get_viewport().get_visible_rect().size.y * 0.35:
@@ -1005,6 +1174,8 @@ func _trigger_game_over() -> void:
 	status_label.text = "FIM DE JOGO"
 
 func _physics_process(delta: float) -> void:
+	if collect_cooldown > 0.0:
+		collect_cooldown = maxf(0.0, collect_cooldown - delta)
 	if not is_instance_valid(player) or game_over:
 		return
 	_update_wave_director(delta)
