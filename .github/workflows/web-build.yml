@@ -20,6 +20,9 @@ permissions:
 jobs:
   web-build:
     runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Baixar projeto
         uses: actions/checkout@v4
