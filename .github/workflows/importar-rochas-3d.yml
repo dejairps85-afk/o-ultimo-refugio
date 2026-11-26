@@ -103,6 +103,7 @@ jobs:
           git push origin HEAD:feature/evolucao-mundo-3d
 
   import-tree-stump:
+    needs: import-rocks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout da branch de desenvolvimento
@@ -171,4 +172,5 @@ jobs:
           git add assets/models/tree_stump_01
           if git diff --cached --quiet; then echo "Nenhum modelo novo"; exit 0; fi
           git commit -m "Adicionar toco de arvore 3D CC0"
+          git pull --rebase origin feature/evolucao-mundo-3d
           git push origin HEAD:feature/evolucao-mundo-3d
