@@ -22,6 +22,7 @@ var rng := RandomNumberGenerator.new()
 var status_label: Label
 var health_bar: ProgressBar
 var enemies: Array = []
+var hostile_humans: Array[Dictionary] = []
 var environment_obstacles: Array[Dictionary] = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
@@ -102,6 +103,7 @@ func _ready() -> void:
 	_build_player()
 	_spawn_infected()
 	_spawn_city_horde()
+	_spawn_hostile_factions()
 	_spawn_allied_survivors()
 	_load_profile()
 	_load_saved_buildings()
@@ -1538,6 +1540,137 @@ func _spawn_infected(count: int = 7) -> void:
 		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "stagger_timer": 0.0, "knockback": Vector3.ZERO, "alive": true})
 
 
+func _spawn_hostile_factions() -> void:
+	var camps := [
+		{"name":"GANGUE DOS CORVOS", "center":Vector2(48.0, -104.0), "count":3, "color":Color(0.16, 0.19, 0.22), "health":170.0},
+		{"name":"FACÇÃO DO PORTO", "center":Vector2(103.0, -25.0), "count":3, "color":Color(0.34, 0.20, 0.13), "health":205.0}
+	]
+	for camp in camps:
+		for i in range(int(camp["count"])):
+			var human := CharacterBody3D.new()
+			human.name = "Hostile_" + str(camp["name"]).replace(" ", "_") + "_" + str(i + 1)
+			human.floor_snap_length = 0.45
+			var capsule := CapsuleShape3D.new()
+			capsule.radius = 0.34
+			capsule.height = 1.82
+			var collision := CollisionShape3D.new()
+			collision.shape = capsule
+			collision.position.y = 0.91
+			human.add_child(collision)
+			var body := MeshInstance3D.new()
+			var body_mesh := CapsuleMesh.new()
+			body_mesh.radius = 0.34
+			body_mesh.height = 1.22
+			body.mesh = body_mesh
+			body.position.y = 0.98
+			body.material_override = _make_material(camp["color"])
+			human.add_child(body)
+			var head := MeshInstance3D.new()
+			var head_mesh := SphereMesh.new()
+			head_mesh.radius = 0.22
+			head_mesh.height = 0.44
+			head.mesh = head_mesh
+			head.position.y = 1.78
+			head.material_override = _make_material(Color(0.48, 0.34, 0.25))
+			human.add_child(head)
+			var helmet := MeshInstance3D.new()
+			var helmet_mesh := SphereMesh.new()
+			helmet_mesh.radius = 0.235
+			helmet_mesh.height = 0.18
+			helmet.mesh = helmet_mesh
+			helmet.position.y = 1.96
+			helmet.material_override = _make_material(Color(0.10, 0.13, 0.12))
+			human.add_child(helmet)
+			var rifle := MeshInstance3D.new()
+			var rifle_mesh := BoxMesh.new()
+			rifle_mesh.size = Vector3(0.10, 0.11, 0.82)
+			rifle.mesh = rifle_mesh
+			rifle.position = Vector3(0.34, 1.20, -0.30)
+			rifle.rotation_degrees.x = -7.0
+			rifle.material_override = _make_material(Color(0.055, 0.065, 0.06))
+			human.add_child(rifle)
+			var label := Label3D.new()
+			label.text = str(camp["name"])
+			label.font_size = 30
+			label.pixel_size = 0.006
+			label.position.y = 2.35
+			label.modulate = Color(1.0, 0.68, 0.48)
+			human.add_child(label)
+			var point: Vector2 = camp["center"] + Vector2(rng.randf_range(-5.0, 5.0), rng.randf_range(-5.0, 5.0))
+			human.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
+			add_child(human)
+			hostile_humans.append({
+				"node": human, "faction": str(camp["name"]), "health": float(camp["health"]),
+				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
+				"fire_timer": rng.randf_range(0.5, 1.8), "stagger_timer": 0.0,
+				"knockback": Vector3.ZERO, "alive": true
+			})
+
+func _alive_hostile_count() -> int:
+	var count := 0
+	for hostile in hostile_humans:
+		if bool(hostile["alive"]) and is_instance_valid(hostile["node"]):
+			count += 1
+	return count
+
+func _spawn_bullet_trace(from_pos: Vector3, to_pos: Vector3) -> void:
+	var trace := MeshInstance3D.new()
+	var beam := BoxMesh.new()
+	beam.size = Vector3(0.035, 0.035, maxf(0.1, from_pos.distance_to(to_pos)))
+	trace.mesh = beam
+	trace.material_override = _make_material(Color(1.0, 0.72, 0.32))
+	trace.global_position = (from_pos + to_pos) * 0.5
+	trace.look_at(to_pos, Vector3.UP)
+	add_child(trace)
+	get_tree().create_timer(0.09).timeout.connect(trace.queue_free)
+
+func _update_hostile_factions(delta: float) -> void:
+	for hostile in hostile_humans:
+		if not bool(hostile["alive"]):
+			continue
+		var npc := hostile["node"] as CharacterBody3D
+		if not is_instance_valid(npc):
+			continue
+		var offset := player.global_position - npc.global_position
+		var distance := Vector2(offset.x, offset.z).length()
+		if float(hostile.get("stagger_timer", 0.0)) > 0.0:
+			hostile["stagger_timer"] = maxf(0.0, float(hostile["stagger_timer"]) - delta)
+			var push: Vector3 = hostile.get("knockback", Vector3.ZERO)
+			npc.velocity.x = push.x
+			npc.velocity.z = push.z
+			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
+		elif distance < 34.0:
+			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
+			if distance > 13.0:
+				var direction := _steer_around_obstacles(npc.global_position, player.global_position)
+				npc.velocity.x = direction.x * float(hostile["speed"])
+				npc.velocity.z = direction.z * float(hostile["speed"])
+			else:
+				npc.velocity.x = move_toward(npc.velocity.x, 0.0, 8.0 * delta)
+				npc.velocity.z = move_toward(npc.velocity.z, 0.0, 8.0 * delta)
+			if distance > 0.5:
+				npc.rotation.y = lerp_angle(npc.rotation.y, atan2(-toward.x, -toward.z), delta * 5.0)
+			hostile["fire_timer"] = float(hostile["fire_timer"]) - delta
+			if distance <= 27.0 and distance >= 5.0 and float(hostile["fire_timer"]) <= 0.0:
+				var muzzle := npc.global_position + Vector3(0.0, 1.28, 0.0) - npc.global_transform.basis.z * 0.65
+				var target := player.global_position + Vector3(0.0, 1.0, 0.0)
+				_spawn_bullet_trace(muzzle, target)
+				if dodge_timer <= 0.0 and rng.randf() > 0.22:
+					player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
+					_trigger_camera_shake(0.035)
+					status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
+				else:
+					status_label.text = "TIROS DESVIADOS"
+				hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
+		else:
+			npc.velocity.x = move_toward(npc.velocity.x, 0.0, 6.0 * delta)
+			npc.velocity.z = move_toward(npc.velocity.z, 0.0, 6.0 * delta)
+		if npc.is_on_floor():
+			npc.velocity.y = 0.0
+		else:
+			npc.velocity.y -= 19.0 * delta
+		npc.move_and_slide()
+
 func _spawn_city_horde() -> void:
 	var spawn_points := [
 		Vector2(57.0, -87.0), Vector2(88.0, -87.0),
@@ -1676,6 +1809,27 @@ func _update_infected(delta: float) -> void:
 					enemy_data["alive"] = false
 					_award_infected_kill()
 					infected.queue_free()
+		for hostile in hostile_humans:
+			if not bool(hostile["alive"]):
+				continue
+			var npc := hostile["node"] as CharacterBody3D
+			if not is_instance_valid(npc):
+				continue
+			var human_offset := npc.global_position - player.global_position
+			var human_distance := Vector2(human_offset.x, human_offset.z).length()
+			var human_direction := Vector3(human_offset.x, 0.0, human_offset.z).normalized()
+			if human_distance < 3.4 and forward.dot(human_direction) > 0.15:
+				hostile["health"] = float(hostile["health"]) - weapon_damage
+				hostile["stagger_timer"] = 0.22
+				hostile["knockback"] = human_direction * 7.0
+				_trigger_camera_shake(0.04)
+				status_label.text = "ACERTO NO COMBATENTE  •  %s" % str(hostile["faction"])
+				if float(hostile["health"]) <= 0.0:
+					hostile["alive"] = false
+					credits += 25
+					_save_profile()
+					npc.queue_free()
+					status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS"
 		for wildlife_index in range(wildlife.size() - 1, -1, -1):
 			var animal_data: Dictionary = wildlife[wildlife_index]
 			var animal := animal_data["node"] as Node3D
@@ -1787,7 +1941,7 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	status_label = Label.new()
-	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS %d" % _alive_enemy_count()
+	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS %d  |  HOSTIS %d" % [_alive_enemy_count(), _alive_hostile_count()]
 	status_label.position = Vector2(22, 18)
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
@@ -2607,6 +2761,7 @@ func _physics_process(delta: float) -> void:
 	if boat_active:
 		_update_boat(delta)
 		_update_infected(delta)
+		_update_hostile_factions(delta)
 		if health_bar:
 			health_bar.value = player_health
 		return
@@ -2618,7 +2773,7 @@ func _physics_process(delta: float) -> void:
 		if health_bar:
 			health_bar.value = player_health
 		if status_label and player_health > 0.0:
-			status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), _alive_enemy_count()]
+			status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d  |  HOSTIS %d" % [int(player_health), _alive_enemy_count(), _alive_hostile_count()]
 		return
 	var keyboard := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var input_dir := keyboard
