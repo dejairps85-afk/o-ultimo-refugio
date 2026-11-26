@@ -159,6 +159,7 @@ func _scatter_environment() -> void:
 			instance = _procedural_tree()
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
+		_add_tree_collision(instance)
 		add_child(instance)
 	for i in range(42):
 		var x := rng.randf_range(-96, 96)
@@ -173,6 +174,7 @@ func _scatter_environment() -> void:
 			instance = _procedural_rock()
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
+		_add_rock_collision(instance)
 		add_child(instance)
 	for i in range(7):
 		if stump_scene:
@@ -183,6 +185,7 @@ func _scatter_environment() -> void:
 				stump.scale = Vector3.ONE * rng.randf_range(0.7, 1.15)
 				stump.position = Vector3(x, _height_at(x, z), z)
 				stump.rotation.y = rng.randf_range(0.0, TAU)
+				_add_stump_collision(stump)
 				add_child(stump)
 	for i in range(80):
 		var x := rng.randf_range(-95, 95)
@@ -198,6 +201,38 @@ func _scatter_environment() -> void:
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
 		add_child(instance)
+
+func _add_tree_collision(root: Node3D) -> void:
+	var body := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	var trunk_shape := CylinderShape3D.new()
+	trunk_shape.radius = 0.48
+	trunk_shape.height = 3.4
+	collision.shape = trunk_shape
+	collision.position.y = 1.7
+	body.add_child(collision)
+	root.add_child(body)
+
+func _add_rock_collision(root: Node3D) -> void:
+	var body := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	var rock_shape := SphereShape3D.new()
+	rock_shape.radius = 0.72
+	collision.shape = rock_shape
+	collision.position.y = 0.48
+	body.add_child(collision)
+	root.add_child(body)
+
+func _add_stump_collision(root: Node3D) -> void:
+	var body := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	var stump_shape := CylinderShape3D.new()
+	stump_shape.radius = 0.52
+	stump_shape.height = 0.72
+	collision.shape = stump_shape
+	collision.position.y = 0.36
+	body.add_child(collision)
+	root.add_child(body)
 
 func _procedural_tree() -> Node3D:
 	var root := Node3D.new()
