@@ -1789,13 +1789,20 @@ func _update_hostile_factions(delta: float) -> void:
 			var flank_angle := float(squad_slot) * TAU / 3.0
 			var flank_radius := 8.0 + float(squad_slot % 2) * 3.0
 			var tactical_target := pursuit_target + Vector3(cos(flank_angle) * flank_radius, 0.0, sin(flank_angle) * flank_radius)
+			# Combatentes muito feridos tentam recuar para o próprio acampamento,
+			# em vez de avançar cegamente até serem eliminados.
+			var retreating := health_ratio < 0.28
+			if retreating:
+				var camp_center: Vector2 = hostile.get("camp_center", Vector2(npc.global_position.x, npc.global_position.z))
+				tactical_target = Vector3(camp_center.x, _height_at(camp_center.x, camp_center.y), camp_center.y)
 			var pursuit_offset := tactical_target - npc.global_position
 			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
 			if pursuit_distance > 2.2:
 				var direction := _steer_around_obstacles(npc.global_position, tactical_target)
-				npc.velocity.x = direction.x * float(hostile["speed"])
-				npc.velocity.z = direction.z * float(hostile["speed"])
+				var movement_speed := float(hostile["speed"]) * (1.12 if retreating else 1.0)
+				npc.velocity.x = direction.x * movement_speed
+				npc.velocity.z = direction.z * movement_speed
 			else:
 				npc.velocity.x = move_toward(npc.velocity.x, 0.0, 8.0 * delta)
 				npc.velocity.z = move_toward(npc.velocity.z, 0.0, 8.0 * delta)
@@ -2095,9 +2102,12 @@ func _fire_rifle() -> void:
 				if float(hostile["health"]) <= 0.0:
 					hostile["alive"] = false
 					credits += 25
+					scrap += 2
+					if equipped_items.get("weapon", "") == "weapon_rifle":
+						rifle_reserve = mini(240, rifle_reserve + 6)
 					_save_profile()
 					npc.queue_free()
-					status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS"
+					status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS  •  +2 SUCATA"
 				break
 	if not hit_target:
 		status_label.text = "DISPARO — ALVO NÃO ATINGIDO"
