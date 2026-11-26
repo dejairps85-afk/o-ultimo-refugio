@@ -1870,10 +1870,10 @@ func _update_infected(delta: float) -> void:
 	if player_attack_cooldown > 0.0:
 		player_attack_cooldown -= delta
 	if attack_requested and player_attack_cooldown <= 0.0:
-			player_attack_cooldown = 0.65
-			if equipped_items.get("weapon", "") == "weapon_rifle":
-				_fire_rifle()
-			else:
+		player_attack_cooldown = 0.65
+		if equipped_items.get("weapon", "") == "weapon_rifle":
+			_fire_rifle()
+		else:
 			player_attack_anim_time = 0.48
 			_play_best_animation(player_animation, ["attack", "punch", "hit"])
 			for enemy_data in enemies:
@@ -1933,7 +1933,7 @@ func _update_infected(delta: float) -> void:
 					_save_profile()
 					status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
 
-func _trigger_camera_shake(strength: float) -> void:func _fire_rifle() -> void:
+func _fire_rifle() -> void:
 	if rifle_reloading:
 		status_label.text = "RECARREGANDO..."
 		return
@@ -2002,7 +2002,7 @@ func _reload_rifle() -> void:
 	rifle_reload_timer = 1.65
 	status_label.text = "RECARREGANDO..."
 
-
+func _trigger_camera_shake(strength: float) -> void:
 	camera_shake_timer = 0.18
 	camera_shake_strength = maxf(camera_shake_strength, strength)
 
