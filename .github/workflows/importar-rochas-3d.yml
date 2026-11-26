@@ -1,0 +1,103 @@
+name: Importar conjunto de rochas 3D realistas
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/evolucao-mundo-3d
+    paths:
+      - .github/workflows/importar-rochas-3d.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-rocks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da branch de desenvolvimento
+        uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Baixar conjunto CC0 de rochas em glTF 1K
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/polyhaven-rocks assets/models/rock_moss_set_01
+          curl -fsSL -A "O-Ultimo-Refugio/1.0 (asset import)" https://api.polyhaven.com/files/rock_moss_set_01 -o /tmp/polyhaven-rocks/files.json
+          python3 - <<'PY'
+          import json, pathlib, urllib.request, urllib.parse
+          root=pathlib.Path("/tmp/polyhaven-rocks")
+          data=json.loads((root/"files.json").read_text())
+          try:
+              descriptor=data["gltf"]["1k"]["gltf"]
+          except Exception as exc:
+              raise SystemExit("A API nao retornou glTF 1K para rock_moss_set_01") from exc
+          if not isinstance(descriptor,dict) or not descriptor.get("url"):
+              raise SystemExit("Descritor glTF sem URL valida")
+          base=root/"model";base.mkdir(exist_ok=True)
+          def download(url,target):
+              target=pathlib.Path(target);target.parent.mkdir(parents=True,exist_ok=True)
+              req=urllib.request.Request(url,headers={"User-Agent":"O-Ultimo-Refugio/1.0"})
+              with urllib.request.urlopen(req,timeout=120) as response,target.open("wb") as out:
+                  out.write(response.read())
+          main_url=descriptor["url"]
+          main_name=pathlib.Path(urllib.parse.urlparse(main_url).path).name or "rocks.gltf"
+          download(main_url,base/main_name)
+          includes=descriptor.get("include",{})
+          entries=includes.items() if isinstance(includes,dict) else enumerate(includes) if isinstance(includes,list) else []
+          for rel,item in entries:
+              if isinstance(item,str): url=item;name=rel or pathlib.Path(urllib.parse.urlparse(url).path).name
+              elif isinstance(item,dict):
+                  url=item.get("url");name=rel or item.get("file") or item.get("name") or pathlib.Path(urllib.parse.urlparse(url or "").path).name
+              else: continue
+              if not url: continue
+              relpath=pathlib.PurePosixPath(str(name))
+              if relpath.is_absolute() or ".." in relpath.parts: raise SystemExit("Dependencia com caminho inseguro")
+              download(url,base.joinpath(*relpath.parts))
+          gltf=json.loads((base/main_name).read_text())
+          missing=[]
+          for section in ("images","buffers"):
+              for entry in gltf.get(section,[]):
+                  uri=entry.get("uri")
+                  if uri and not uri.startswith(("data:","http://","https://")) and not (base/pathlib.PurePosixPath(uri)).is_file():
+                      missing.append(uri)
+          if missing: raise SystemExit("Dependencias ausentes: "+", ".join(missing))
+          print("Modelo glTF e dependencias verificados.")
+          PY
+          npm install --global @gltf-transform/cli
+          INPUT="$(find /tmp/polyhaven-rocks/model -maxdepth 1 -name '*.gltf' -print -quit)"
+          test -n "$INPUT"
+          gltf-transform simplify "$INPUT" /tmp/polyhaven-rocks/rocks-simplified.glb --ratio 0.22 --error 0.001
+          gltf-transform optimize /tmp/polyhaven-rocks/rocks-simplified.glb assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb
+          test -s assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb
+          SIZE=$(stat -c%s assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb)
+          echo "Conjunto otimizado: $SIZE bytes"
+          if [ "$SIZE" -gt 20000000 ]; then echo "Modelo excede 20 MB."; exit 1; fi
+
+      - name: Registrar origem e licenca
+        run: |
+          cat > assets/models/rock_moss_set_01/ASSET-CREDITS.txt <<'EOF'
+          Rock Moss Set 01
+          Autor: Kless Gyzen
+          Fonte: https://polyhaven.com/a/rock_moss_set_01
+          Licenca: CC0 1.0 Universal
+          Arquivo: rock_moss_set_01_mobile.glb
+          Processamento: simplificacao de geometria e otimizacao para dispositivos moveis.
+          EOF
+
+      - name: Commit do modelo na branch de desenvolvimento
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/rock_moss_set_01
+          if git diff --cached --quiet; then echo "Nenhum modelo novo."; exit 0; fi
+          git commit -m "Adicionar conjunto de rochas 3D realistas CC0"
+          git push origin HEAD:feature/evolucao-mundo-3d
