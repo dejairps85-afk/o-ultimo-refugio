@@ -25,6 +25,10 @@ var player_animation: AnimationPlayer
 var player_health := 100.0
 var stamina := 100.0
 var sprint_enabled := false
+var dodge_requested := false
+var dodge_timer := 0.0
+var dodge_cooldown := 0.0
+var dodge_direction := Vector3.ZERO
 var stamina_bar: ProgressBar
 var sprint_button: Button
 var player_attack_cooldown := 0.0
@@ -117,13 +121,17 @@ func _setup_environment() -> void:
 	env.sky = sky
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	env.tonemap_exposure = 1.05
+	env.adjustment_enabled = true
+	env.adjustment_brightness = 1.02
+	env.adjustment_contrast = 1.08
+	env.adjustment_saturation = 1.10
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.48, 0.54, 0.48)
 	env.ambient_light_energy = 0.65
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.48, 0.53, 0.46)
-	env.fog_density = 0.006
+	env.fog_density = 0.0048
 	env.fog_sky_affect = 0.45
 	world_environment.environment = env
 	add_child(world_environment)
@@ -1481,7 +1489,8 @@ func _build_player() -> void:
 	camera_pivot.position = Vector3(0, 1.55, 0)
 	player.add_child(camera_pivot)
 	camera = Camera3D.new()
-	camera.position = Vector3(0, 2.0, 6.5)
+	camera.position = Vector3(0, 2.15, 6.8)
+	camera.fov = 74.0
 	camera.rotation_degrees.x = -12
 	camera.current = true
 	camera_pivot.add_child(camera)
@@ -1619,9 +1628,12 @@ func _update_infected(delta: float) -> void:
 			_play_best_animation(enemy_data["anim"], ["attack", "bite", "idle", "stand"])
 			enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
 			if float(enemy_data["attack_timer"]) <= 0.0:
-				player_health = maxf(0.0, player_health - 7.0)
+				if dodge_timer <= 0.0:
+					player_health = maxf(0.0, player_health - 7.0)
+					status_label.text = "ALERTA: VOCE FOI ATACADO"
+				else:
+					status_label.text = "ESQUIVA PERFEITA"
 				enemy_data["attack_timer"] = 1.25
-				status_label.text = "ALERTA: VOCE FOI ATACADO"
 		if infected.is_on_floor():
 			infected.velocity.y = 0.0
 		else:
@@ -1860,6 +1872,12 @@ func _build_hud() -> void:
 	sprint_button.offset_bottom = -170
 	sprint_button.pressed.connect(_toggle_sprint)
 	layer.add_child(sprint_button)
+	var dodge_button := Button.new()
+	dodge_button.text = "ESQUIVAR"
+	dodge_button.custom_minimum_size = Vector2(118, 52)
+	dodge_button.position = Vector2(22, 430)
+	dodge_button.pressed.connect(func(): dodge_requested = true)
+	layer.add_child(dodge_button)
 	wallet_label = Label.new()
 	wallet_label.text = "CRÉDITOS: %d" % credits
 	wallet_label.position = Vector2(22, 102)
@@ -2551,6 +2569,8 @@ func _physics_process(delta: float) -> void:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
 	if fishing_cooldown > 0.0:
 		fishing_cooldown = maxf(0.0, fishing_cooldown - delta)
+	if dodge_cooldown > 0.0:
+		dodge_cooldown = maxf(0.0, dodge_cooldown - delta)
 	if not is_instance_valid(player) or game_over:
 		return
 	_update_day_night(delta)
@@ -2586,23 +2606,42 @@ func _physics_process(delta: float) -> void:
 	right = right.normalized()
 	var direction := (right * input_dir.x + forward * -input_dir.y).normalized()
 	var moving := direction.length() > 0.05
-	var sprinting := sprint_enabled and moving and stamina > 0.0
+	if dodge_requested:
+		if dodge_cooldown <= 0.0 and stamina >= 22.0:
+			dodge_direction = direction if moving else -player.global_transform.basis.z
+			dodge_direction.y = 0.0
+			dodge_direction = dodge_direction.normalized()
+			dodge_timer = 0.42
+			dodge_cooldown = 1.15
+			stamina -= 22.0
+			player.rotation.y = atan2(-dodge_direction.x, -dodge_direction.z)
+		else:
+			status_label.text = "ESQUIVA INDISPONÍVEL: RECUPERE ENERGIA"
+	dodge_requested = false
+	var sprinting := sprint_enabled and moving and stamina > 0.0 and dodge_timer <= 0.0
 	if sprinting:
 		stamina = maxf(0.0, stamina - 24.0 * delta)
-	else:
+	elif dodge_timer <= 0.0:
 		stamina = minf(100.0, stamina + (13.0 if moving else 21.0) * delta)
 	if stamina <= 0.0 and sprint_enabled:
 		sprint_enabled = false
 		if is_instance_valid(sprint_button):
 			sprint_button.text = "CORRER: OFF"
 	var movement_speed := PLAYER_SPEED * (1.65 if sprinting else 1.0)
-	if moving:
+	if dodge_timer > 0.0:
+		dodge_timer = maxf(0.0, dodge_timer - delta)
+		player.velocity.x = dodge_direction.x * 14.0
+		player.velocity.z = dodge_direction.z * 14.0
+	elif moving:
 		player.velocity.x = direction.x * movement_speed
 		player.velocity.z = direction.z * movement_speed
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(-direction.x, -direction.z), delta * 9.0)
 	else:
 		player.velocity.x = move_toward(player.velocity.x, 0.0, PLAYER_SPEED * 5.0 * delta)
 		player.velocity.z = move_toward(player.velocity.z, 0.0, PLAYER_SPEED * 5.0 * delta)
+	if is_instance_valid(camera):
+		var target_fov := 80.0 if sprinting or dodge_timer > 0.0 else 74.0
+		camera.fov = lerpf(camera.fov, target_fov, delta * 4.0)
 	if not player.is_on_floor():
 		player.velocity.y -= 19.0 * delta
 	elif jump_requested or Input.is_action_just_pressed("jump"):
