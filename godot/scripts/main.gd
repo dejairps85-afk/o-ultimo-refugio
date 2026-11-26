@@ -16,6 +16,8 @@ var jump_requested := false
 var attack_requested := false
 var _touch_move := Vector2.ZERO
 var _attack_feedback_time := 0.0
+var camera_shake_timer := 0.0
+var camera_shake_strength := 0.0
 var rng := RandomNumberGenerator.new()
 var status_label: Label
 var health_bar: ProgressBar
@@ -1533,7 +1535,7 @@ func _spawn_infected(count: int = 7) -> void:
 		var animator := _find_animation_player(visual)
 		_play_best_animation(animator, ["idle", "walk", "move"])
 		var difficulty := 1.0 + float(wave_number - 1) * 0.10
-		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
+		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "stagger_timer": 0.0, "knockback": Vector3.ZERO, "alive": true})
 
 
 func _spawn_city_horde() -> void:
@@ -1607,6 +1609,15 @@ func _update_infected(delta: float) -> void:
 			continue
 		var to_player := player.global_position - infected.global_position
 		var distance := Vector2(to_player.x, to_player.z).length()
+		if float(enemy_data.get("stagger_timer", 0.0)) > 0.0:
+			enemy_data["stagger_timer"] = maxf(0.0, float(enemy_data["stagger_timer"]) - delta)
+			var push: Vector3 = enemy_data.get("knockback", Vector3.ZERO)
+			infected.velocity.x = push.x
+			infected.velocity.z = push.z
+			infected.velocity.y = -1.5 if infected.is_on_floor() else infected.velocity.y - 19.0 * delta
+			infected.move_and_slide()
+			enemy_data["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
+			continue
 		if bool(enemy_data.get("territorial", false)) and distance > float(enemy_data.get("activation_radius", 44.0)):
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
@@ -1630,6 +1641,7 @@ func _update_infected(delta: float) -> void:
 			if float(enemy_data["attack_timer"]) <= 0.0:
 				if dodge_timer <= 0.0:
 					player_health = maxf(0.0, player_health - 7.0)
+					_trigger_camera_shake(0.055)
 					status_label.text = "ALERTA: VOCE FOI ATACADO"
 				else:
 					status_label.text = "ESQUIVA PERFEITA"
@@ -1655,16 +1667,14 @@ func _update_infected(delta: float) -> void:
 			var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
 			if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
 				enemy_data["health"] = float(enemy_data["health"]) - weapon_damage
+				enemy_data["stagger_timer"] = 0.20
+				enemy_data["knockback"] = target_direction * 6.5
+				_trigger_camera_shake(0.035)
+				_attack_feedback_time = 0.55
+				status_label.text = "ACERTO!  -%d HP" % int(weapon_damage)
 				if float(enemy_data["health"]) <= 0.0:
 					enemy_data["alive"] = false
-					credits += 15
-					mission_kills = mini(mission_goal, mission_kills + 1)
-					if mission_kills >= mission_goal and not mission_reward_claimed:
-						mission_reward_claimed = true
-						credits += 100
-						status_label.text = "CONTRATO CONCLUÍDO: +100 CRÉDITOS"
-					_update_mission_hud()
-					_save_profile()
+					_award_infected_kill()
 					infected.queue_free()
 		for wildlife_index in range(wildlife.size() - 1, -1, -1):
 			var animal_data: Dictionary = wildlife[wildlife_index]
@@ -1682,6 +1692,21 @@ func _update_infected(delta: float) -> void:
 				wildlife.remove_at(wildlife_index)
 				_save_profile()
 				status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
+
+func _trigger_camera_shake(strength: float) -> void:
+	camera_shake_timer = 0.18
+	camera_shake_strength = maxf(camera_shake_strength, strength)
+
+func _update_camera_feedback(delta: float) -> void:
+	if not is_instance_valid(camera):
+		return
+	if camera_shake_timer > 0.0:
+		camera_shake_timer = maxf(0.0, camera_shake_timer - delta)
+		var fade := camera_shake_timer / 0.18
+		camera.rotation.z = sin(float(Time.get_ticks_msec()) * 0.075) * camera_shake_strength * fade
+		if camera_shake_timer <= 0.0:
+			camera.rotation.z = 0.0
+			camera_shake_strength = 0.0
 
 func _award_infected_kill() -> void:
 	credits += 15
@@ -2565,6 +2590,7 @@ func _toggle_sprint() -> void:
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
 func _physics_process(delta: float) -> void:
+	_update_camera_feedback(delta)
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
 	if fishing_cooldown > 0.0:
