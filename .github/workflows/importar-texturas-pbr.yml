@@ -83,12 +83,12 @@ jobs:
                   downloaded.append(filename)
               (out / "ASSET-CREDITS.txt").write_text(
                   asset_id + "\nFonte: https://polyhaven.com/a/" + asset_id +
-                  "\nLicenca: CC0 1.0 Universal\nMapas PBR baixados em 1K/2K para uso mobile.\n",
+                  "\nLicenca: CC0 1.0 Universal\nMapas PBR JPG baixados em 1K para uso mobile.\n",
                   encoding="utf-8")
               print(asset_id + ": " + ", ".join(downloaded))
           print("Total de bytes baixados:", total)
-          if total > 60000000:
-              raise SystemExit("Pacote PBR excede o limite de 60 MB.")
+          if total > 35000000:
+              raise SystemExit("Pacote PBR excede o limite de 35 MB.")
           PY
 
       - name: Commit das texturas na branch de desenvolvimento
