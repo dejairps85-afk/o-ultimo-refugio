@@ -760,6 +760,16 @@ func _update_infected(delta: float) -> void:
 					_save_profile()
 					infected.queue_free()
 
+func _award_infected_kill() -> void:
+	credits += 15
+	mission_kills = mini(mission_goal, mission_kills + 1)
+	if mission_kills >= mission_goal and not mission_reward_claimed:
+		mission_reward_claimed = true
+		credits += 100
+		if is_instance_valid(status_label):
+			status_label.text = "CONTRATO CONCLUÍDO: +100 CRÉDITOS"
+	_update_mission_hud()
+	_save_profile()
 func _alive_enemy_count() -> int:
 	var alive_count := 0
 	for enemy_data in enemies:
@@ -1319,7 +1329,7 @@ func _spawn_allied_survivors() -> void:
 		role_label.modulate = Color(0.88, 0.94, 0.82)
 		ally.add_child(role_label)
 		add_child(ally)
-		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "work_timer": 6.0, "combat_timer": 0.0})
+		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "scavenge_timer": 6.0, "heal_timer": 8.0, "combat_timer": 0.0})
 
 func _update_allied_survivors(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -1354,8 +1364,7 @@ func _update_allied_survivors(delta: float) -> void:
 				data["combat_timer"] = 1.25
 				if float(nearest_enemy["health"]) <= 0.0:
 					nearest_enemy["alive"] = false
-					credits += 15
-					_save_profile()
+					_award_infected_kill()
 					threat.queue_free()
 		else:
 			data["state"] = "FOLLOW"
@@ -1374,8 +1383,8 @@ func _update_allied_survivors(delta: float) -> void:
 		else:
 			ally.velocity.y = 0.0
 		ally.move_and_slide()
-		data["work_timer"] = float(data["work_timer"]) - delta
-		if float(data["work_timer"]) <= 0.0 and distance < 24.0:
+		data["scavenge_timer"] = maxf(0.0, float(data["scavenge_timer"]) - delta)
+		if float(data["scavenge_timer"]) <= 0.0 and distance < 24.0:
 			for resource_index in range(resource_nodes.size()):
 				var resource_data: Dictionary = resource_nodes[resource_index]
 				var resource_node := resource_data["node"] as Node3D
@@ -1387,14 +1396,16 @@ func _update_allied_survivors(delta: float) -> void:
 						"food": food += amount
 					resource_node.queue_free()
 					resource_nodes.remove_at(resource_index)
-					data["work_timer"] = 9.0
+					data["scavenge_timer"] = 9.0
 					_save_profile()
 					break
-		if str(data["role"]) == "MÉDICA" and player_health < 85.0 and food > 0 and float(data["work_timer"]) <= 0.0:
-			food -= 1
-			player_health = minf(100.0, player_health + 12.0)
-			data["work_timer"] = 18.0
-			_save_profile()
+		if str(data["role"]) == "MÉDICA":
+			data["heal_timer"] = maxf(0.0, float(data["heal_timer"]) - delta)
+			if player_health < 90.0 and food > 0 and float(data["heal_timer"]) <= 0.0 and player.global_position.distance_to(ally.global_position) < 7.0:
+				food -= 1
+				player_health = minf(100.0, player_health + 12.0)
+				data["heal_timer"] = 18.0
+				_save_profile()
 		allied_survivors[index] = data
 	if is_instance_valid(resource_label):
 		resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d  |  ALIADOS %d" % [wood, scrap, food, allied_survivors.size()]
