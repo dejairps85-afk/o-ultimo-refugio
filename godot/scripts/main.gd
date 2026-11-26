@@ -3019,43 +3019,70 @@ func _fire_tank_cannon() -> void:
 	query.exclude = [vehicle.get_rid()]
 	query.collision_mask = 1
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	var hit_position: Vector3 = hit.get("position", target_point)
-	_spawn_bullet_trace(origin, hit_position)
-	var collider: Object = hit.get("collider")
-	var hit_name := "TIRO DO CANHÃO"
+	var impact_position: Vector3 = hit.get("position", target_point)
+	_spawn_bullet_trace(origin, impact_position)
+	_spawn_tank_explosion(impact_position)
+	var blast_radius := 8.0
+	var eliminated := 0
 	for enemy_data in enemies:
 		if not bool(enemy_data.get("alive", false)):
 			continue
 		var target := enemy_data.get("node") as CharacterBody3D
-		if is_instance_valid(target) and collider == target:
-			enemy_data["health"] = float(enemy_data.get("health", 0.0)) - 220.0
-			hit_name = "INFECTADO ATINGIDO"
-			if float(enemy_data["health"]) <= 0.0:
-				enemy_data["alive"] = false
-				_award_infected_kill()
-				target.queue_free()
-				hit_name = "INFECTADO ELIMINADO"
-			break
+		if not is_instance_valid(target):
+			continue
+		var distance := target.global_position.distance_to(impact_position)
+		if distance > blast_radius:
+			continue
+		var damage := 220.0 * (1.0 - 0.55 * distance / blast_radius)
+		enemy_data["health"] = float(enemy_data.get("health", 0.0)) - damage
+		enemy_data["stagger_timer"] = 0.8
+		enemy_data["knockback"] = (target.global_position - impact_position).normalized() * 9.0
+		if float(enemy_data["health"]) <= 0.0:
+			enemy_data["alive"] = false
+			_award_infected_kill()
+			target.queue_free()
+			eliminated += 1
 	for hostile in hostile_humans:
 		if not bool(hostile.get("alive", false)):
 			continue
 		var target := hostile.get("node") as CharacterBody3D
-		if is_instance_valid(target) and collider == target:
-			hostile["health"] = float(hostile.get("health", 0.0)) - 260.0
-			hit_name = "BLINDADO HOSTIL ATINGIDO"
-			if float(hostile["health"]) <= 0.0:
-				hostile["alive"] = false
-				_drop_weapon_pickup(target.global_position, str(hostile.get("weapon_id", "weapon_pistol")))
-				credits += 25
-				scrap += 2
-				_save_profile()
-				target.queue_free()
-				hit_name = "COMBATENTE ELIMINADO"
-			break
-	status_label.text = "%s  •  GRANADAS 0  •  MUNIÇÃO DO CANHÃO %d" % [hit_name, tank_shells]
-	_trigger_camera_shake(0.12)
+		if not is_instance_valid(target):
+			continue
+		var distance := target.global_position.distance_to(impact_position)
+		if distance > blast_radius:
+			continue
+		var damage := 260.0 * (1.0 - 0.55 * distance / blast_radius)
+		hostile["health"] = float(hostile.get("health", 0.0)) - damage
+		hostile["stagger_timer"] = 0.8
+		hostile["knockback"] = (target.global_position - impact_position).normalized() * 9.0
+		if float(hostile["health"]) <= 0.0:
+			hostile["alive"] = false
+			_drop_weapon_pickup(target.global_position, str(hostile.get("weapon_id", "weapon_pistol")))
+			credits += 25
+			scrap += 2
+			_save_profile()
+			target.queue_free()
+			eliminated += 1
+	status_label.text = "EXPLOSÃO! %d INIMIGOS ELIMINADOS • CANHÃO %d/20" % [eliminated, tank_shells]
+	_trigger_camera_shake(0.16)
 	_save_profile()
 
+
+func _spawn_tank_explosion(position: Vector3) -> void:
+	var effect := MeshInstance3D.new()
+	var blast_mesh := SphereMesh.new()
+	blast_mesh.radius = 0.8
+	blast_mesh.height = 1.6
+	effect.mesh = blast_mesh
+	effect.position = position
+	effect.material_override = _make_material(Color(1.0, 0.42, 0.12), 0.28, 0.0)
+	effect.material_override.albedo_color = Color(1.0, 0.42, 0.12, 0.82)
+	effect.material_override.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	add_child(effect)
+	var tween := create_tween()
+	tween.tween_property(effect, "scale", Vector3.ONE * 5.5, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(effect, "modulate:a", 0.0, 0.24)
+	tween.tween_callback(effect.queue_free)
 
 func _apply_player_customization() -> void:
 	if not is_instance_valid(player):
