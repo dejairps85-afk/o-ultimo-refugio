@@ -1011,6 +1011,14 @@ func _interact_with_wilderness() -> void:
 			"east_delegacia":
 				found_scrap += 5
 				credits += 75
+			"faction_corvos":
+				found_scrap += 8
+				found_food += 2
+				credits += 90
+			"faction_porto":
+				found_scrap += 11
+				found_medicine += 1
+				credits += 120
 			_:
 				credits += 35
 		wood += found_wood
@@ -1540,12 +1548,62 @@ func _spawn_infected(count: int = 7) -> void:
 		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "stagger_timer": 0.0, "knockback": Vector3.ZERO, "alive": true})
 
 
+func _build_faction_camp(camp: Dictionary) -> void:
+	var center: Vector2 = camp["center"]
+	var root := Node3D.new()
+	root.name = "FactionCamp_" + str(camp["name"]).replace(" ", "_")
+	root.position = Vector3(center.x, _height_at(center.x, center.y), center.y)
+	var tent := MeshInstance3D.new()
+	var tent_mesh := PrismMesh.new()
+	tent_mesh.size = Vector3(5.0, 2.8, 4.0)
+	tent.mesh = tent_mesh
+	tent.position = Vector3(-1.8, 1.25, -1.0)
+	tent.material_override = _make_material(camp["color"], 0.92)
+	root.add_child(tent)
+	var canopy := MeshInstance3D.new()
+	var canopy_mesh := BoxMesh.new()
+	canopy_mesh.size = Vector3(4.2, 0.16, 3.2)
+	canopy.mesh = canopy_mesh
+	canopy.position = Vector3(2.1, 2.05, 1.0)
+	canopy.material_override = _make_material(Color(0.12, 0.14, 0.13), 0.88)
+	root.add_child(canopy)
+	# Barricadas baixas com uma abertura frontal para entrada do jogador.
+	for offset in [Vector3(-4.2, 0.65, -2.8), Vector3(0.0, 0.65, -4.0), Vector3(4.2, 0.65, -2.8), Vector3(-4.2, 0.65, 2.8), Vector3(4.2, 0.65, 2.8)]:
+		var barricade := MeshInstance3D.new()
+		var barricade_mesh := BoxMesh.new()
+		barricade_mesh.size = Vector3(2.8, 1.3, 0.42)
+		barricade.mesh = barricade_mesh
+		barricade.position = offset
+		barricade.rotation.y = 0.0
+		barricade.material_override = _make_material(Color(0.24, 0.19, 0.13), 0.95)
+		root.add_child(barricade)
+	var signal_post := MeshInstance3D.new()
+	var post_mesh := CylinderMesh.new()
+	post_mesh.top_radius = 0.07
+	post_mesh.bottom_radius = 0.09
+	post_mesh.height = 3.2
+	signal_post.mesh = post_mesh
+	signal_post.position = Vector3(3.9, 1.6, 3.6)
+	signal_post.material_override = _make_material(Color(0.18, 0.16, 0.12))
+	root.add_child(signal_post)
+	var flag := MeshInstance3D.new()
+	var flag_mesh := PlaneMesh.new()
+	flag_mesh.size = Vector2(1.2, 0.72)
+	flag.mesh = flag_mesh
+	flag.position = Vector3(3.35, 2.65, 3.6)
+	flag.material_override = _make_material(camp["color"], 0.8)
+	root.add_child(flag)
+	add_child(root)
+	var cache_id := "faction_corvos" if str(camp["name"]) == "GANGUE DOS CORVOS" else "faction_porto"
+	_add_town_loot_cache(cache_id, "ESCONDERIJO: " + str(camp["name"]), Vector3(center.x + 2.8, _height_at(center.x + 2.8, center.y + 1.2), center.y + 1.2))
+
 func _spawn_hostile_factions() -> void:
 	var camps := [
 		{"name":"GANGUE DOS CORVOS", "center":Vector2(48.0, -104.0), "count":3, "color":Color(0.16, 0.19, 0.22), "health":170.0},
 		{"name":"FACÇÃO DO PORTO", "center":Vector2(103.0, -25.0), "count":3, "color":Color(0.34, 0.20, 0.13), "health":205.0}
 	]
 	for camp in camps:
+		_build_faction_camp(camp)
 		for i in range(int(camp["count"])):
 			var human := CharacterBody3D.new()
 			human.name = "Hostile_" + str(camp["name"]).replace(" ", "_") + "_" + str(i + 1)
