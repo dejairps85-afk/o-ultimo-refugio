@@ -88,6 +88,7 @@ func _ready() -> void:
 	_build_river()
 	_scatter_environment()
 	_spawn_points_of_interest()
+	_build_abandoned_town()
 	_spawn_wildlife()
 	_build_boat()
 	_build_player()
@@ -565,6 +566,127 @@ func _spawn_resource_nodes() -> void:
 		add_child(node)
 		resource_nodes.append({"node": node, "kind": kind, "amount": rng.randi_range(2, 4)})
 
+
+func _build_abandoned_town() -> void:
+	var town := Node3D.new()
+	town.name = "AbandonedTown_EastDistrict"
+	var center := Vector2(72.0, -66.0)
+	town.position = Vector3(center.x, 0.0, center.y)
+	add_child(town)
+	var road_material := _make_material(Color(0.12, 0.13, 0.12), 0.98)
+	var curb_material := _make_material(Color(0.34, 0.34, 0.29), 0.95)
+	var road_x := MeshInstance3D.new()
+	var road_x_mesh := BoxMesh.new()
+	road_x_mesh.size = Vector3(52.0, 0.12, 5.2)
+	road_x.mesh = road_x_mesh
+	road_x.position = Vector3(0.0, _height_at(center.x, center.y) + 0.07, 0.0)
+	road_x.material_override = road_material
+	town.add_child(road_x)
+	var road_z := MeshInstance3D.new()
+	var road_z_mesh := BoxMesh.new()
+	road_z_mesh.size = Vector3(5.2, 0.12, 52.0)
+	road_z.mesh = road_z_mesh
+	road_z.position = road_x.position
+	road_z.material_override = road_material
+	town.add_child(road_z)
+	for offset in [-18.0, 18.0]:
+		var side_road := MeshInstance3D.new()
+		var side_mesh := BoxMesh.new()
+		side_mesh.size = Vector3(46.0, 0.10, 3.2)
+		side_road.mesh = side_mesh
+		side_road.position = Vector3(0.0, road_x.position.y + 0.01, offset)
+		side_road.material_override = road_material
+		town.add_child(side_road)
+		var cross_road := MeshInstance3D.new()
+		var cross_mesh := BoxMesh.new()
+		cross_mesh.size = Vector3(3.2, 0.10, 46.0)
+		cross_road.mesh = cross_mesh
+		cross_road.position = Vector3(offset, road_x.position.y + 0.01, 0.0)
+		cross_road.material_override = road_material
+		town.add_child(cross_road)
+	var building_specs := [
+		{"p": Vector3(-13.0, 0.0, -13.0), "s": Vector3(10.0, 7.0, 9.0), "c": Color(0.43, 0.39, 0.31), "n": "RESIDÊNCIA"},
+		{"p": Vector3(13.0, 0.0, -13.0), "s": Vector3(11.0, 10.0, 9.0), "c": Color(0.36, 0.39, 0.38), "n": "CLÍNICA"},
+		{"p": Vector3(-13.0, 0.0, 13.0), "s": Vector3(12.0, 8.0, 10.0), "c": Color(0.39, 0.31, 0.25), "n": "MERCADO"},
+		{"p": Vector3(13.0, 0.0, 13.0), "s": Vector3(9.0, 6.0, 9.0), "c": Color(0.42, 0.38, 0.32), "n": "OFICINA"},
+		{"p": Vector3(-21.0, 0.0, 0.0), "s": Vector3(7.0, 5.0, 8.0), "c": Color(0.34, 0.37, 0.34), "n": "GARAGEM"},
+		{"p": Vector3(21.0, 0.0, 0.0), "s": Vector3(7.0, 8.0, 8.0), "c": Color(0.38, 0.36, 0.31), "n": "DELEGACIA"}
+	]
+	for spec in building_specs:
+		var building_position: Vector3 = spec["p"]
+		var dimensions: Vector3 = spec["s"]
+		var ground_y := _height_at(center.x + building_position.x, center.y + building_position.z)
+		var building := StaticBody3D.new()
+		building.name = str(spec["n"]).replace(" ", "_")
+		building.position = Vector3(building_position.x, ground_y + dimensions.y * 0.5, building_position.z)
+		var shell := MeshInstance3D.new()
+		var shell_mesh := BoxMesh.new()
+		shell_mesh.size = dimensions
+		shell.mesh = shell_mesh
+		shell.material_override = _make_material(spec["c"], 0.92)
+		building.add_child(shell)
+		var collision := CollisionShape3D.new()
+		var collision_shape := BoxShape3D.new()
+		collision_shape.size = dimensions
+		collision.shape = collision_shape
+		building.add_child(collision)
+		var roof := MeshInstance3D.new()
+		var roof_mesh := BoxMesh.new()
+		roof_mesh.size = Vector3(dimensions.x + 0.5, 0.28, dimensions.z + 0.5)
+		roof.mesh = roof_mesh
+		roof.position.y = dimensions.y * 0.5 + 0.12
+		roof.material_override = _make_material(Color(0.17, 0.19, 0.18), 0.86)
+		building.add_child(roof)
+		for side in [-1.0, 1.0]:
+			var window := MeshInstance3D.new()
+			var window_mesh := BoxMesh.new()
+			window_mesh.size = Vector3(1.25, 1.0, 0.08)
+			window.mesh = window_mesh
+			window.position = Vector3(side * dimensions.x * 0.24, 0.5, -dimensions.z * 0.5 - 0.045)
+			window.material_override = _make_material(Color(0.10, 0.17, 0.18), 0.25)
+			building.add_child(window)
+		town.add_child(building)
+		var sign := Label3D.new()
+		sign.text = str(spec["n"])
+		sign.position = Vector3(building_position.x, ground_y + dimensions.y + 1.5, building_position.z)
+		sign.font_size = 26
+		sign.modulate = Color(0.85, 0.79, 0.62)
+		town.add_child(sign)
+	for lamp_x in [-23.0, 0.0, 23.0]:
+		for lamp_z in [-23.0, 0.0, 23.0]:
+			if absf(lamp_x) < 1.0 and absf(lamp_z) < 1.0:
+				continue
+			var lamp := Node3D.new()
+			lamp.position = Vector3(lamp_x, _height_at(center.x + lamp_x, center.y + lamp_z), lamp_z)
+			var pole := MeshInstance3D.new()
+			var pole_mesh := CylinderMesh.new()
+			pole_mesh.top_radius = 0.07
+			pole_mesh.bottom_radius = 0.11
+			pole_mesh.height = 4.6
+			pole.mesh = pole_mesh
+			pole.position.y = 2.3
+			pole.material_override = _make_material(Color(0.16, 0.17, 0.16), 0.7)
+			lamp.add_child(pole)
+			var bulb := MeshInstance3D.new()
+			var bulb_mesh := SphereMesh.new()
+			bulb_mesh.radius = 0.24
+			bulb_mesh.height = 0.42
+			bulb.mesh = bulb_mesh
+			bulb.position.y = 4.55
+			var bulb_material := StandardMaterial3D.new()
+			bulb_material.albedo_color = Color(1.0, 0.72, 0.35)
+			bulb_material.emission_enabled = true
+			bulb_material.emission = Color(1.0, 0.55, 0.22)
+			bulb_material.emission_energy_multiplier = 1.4
+			bulb.material_override = bulb_material
+			lamp.add_child(bulb)
+			town.add_child(lamp)
+	var town_label := Label3D.new()
+	town_label.text = "DISTRITO LESTE  •  ZONA DE RISCO"
+	town_label.position = Vector3(0.0, 5.0, -27.0)
+	town_label.font_size = 38
+	town_label.modulate = Color(0.88, 0.48, 0.34)
+	town.add_child(town_label)
 
 func _spawn_points_of_interest() -> void:
 	var locations := [
