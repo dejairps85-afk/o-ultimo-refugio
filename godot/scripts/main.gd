@@ -57,6 +57,7 @@ var resource_label: Label
 var wood := 0
 var scrap := 0
 var food := 0
+var medical_supplies := 0
 var resource_nodes: Array[Dictionary] = []
 var collect_requested := false
 var collect_cooldown := 0.0
@@ -973,15 +974,28 @@ func _interact_with_wilderness() -> void:
 		var found_wood := rng.randi_range(3, 7)
 		var found_scrap := rng.randi_range(2, 5)
 		var found_food := rng.randi_range(1, 3)
+		var found_medicine := 0
+		match poi_id:
+			"east_clinica":
+				found_medicine = rng.randi_range(2, 4)
+				found_food = 0
+			"east_mercado":
+				found_food += 4
+				found_wood = 0
+			"east_delegacia":
+				found_scrap += 5
+				credits += 75
+			_:
+				credits += 35
 		wood += found_wood
 		scrap += found_scrap
 		food += found_food
-		credits += 35
+		medical_supplies += found_medicine
 		looted_poi_ids.append(poi_id)
 		(cache_data["node"] as Node3D).visible = false
 		_save_profile()
 		collect_cooldown = 0.6
-		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +35 CRÉDITOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food]
+		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS MÉDICOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine]
 		return
 	var nearest_resource := 999.0
 	for data in resource_nodes:
@@ -1006,6 +1020,22 @@ func _interact_with_wilderness() -> void:
 			status_label.text = "OS PEIXES NÃO MORDERAM A ISCA. TENTE NOVAMENTE"
 		return
 	_collect_nearby_resource()
+
+
+func _use_medkit() -> void:
+	if medical_supplies <= 0:
+		status_label.text = "NENHUM KIT MÉDICO DISPONÍVEL"
+		return
+	if player_health >= 100.0:
+		status_label.text = "SUA VIDA JÁ ESTÁ COMPLETA"
+		return
+	medical_supplies -= 1
+	player_health = minf(100.0, player_health + 45.0)
+	if is_instance_valid(health_bar):
+		health_bar.value = player_health
+	_save_profile()
+	status_label.text = "KIT MÉDICO UTILIZADO: +45 VIDA"
+
 
 func _collect_nearby_resource() -> void:
 	if collect_cooldown > 0.0:
@@ -1835,7 +1865,7 @@ func _build_hud() -> void:
 	layer.add_child(mission_label)
 	_update_mission_hud()
 	resource_label = Label.new()
-	resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d" % [wood, scrap, food]
+	resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d  |  MED %d" % [wood, scrap, food, medical_supplies]
 	resource_label.position = Vector2(22, 170)
 	resource_label.add_theme_font_size_override("font_size", 14)
 	resource_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.68))
@@ -1846,6 +1876,12 @@ func _build_hud() -> void:
 	collect_button.position = Vector2(22, 294)
 	collect_button.pressed.connect(_collect_nearby_resource)
 	layer.add_child(collect_button)
+	var medkit_button := Button.new()
+	medkit_button.text = "USAR KIT MÉDICO"
+	medkit_button.custom_minimum_size = Vector2(150, 44)
+	medkit_button.position = Vector2(22, 344)
+	medkit_button.pressed.connect(_use_medkit)
+	layer.add_child(medkit_button)
 	var build_button := Button.new()
 	build_button.text = "CONSTRUIR BARRICADA"
 	build_button.custom_minimum_size = Vector2(190, 44)
@@ -1909,6 +1945,7 @@ func _load_profile() -> void:
 		wood = int(config.get_value("profile", "wood", 0))
 		scrap = int(config.get_value("profile", "scrap", 0))
 		food = int(config.get_value("profile", "food", 0))
+		medical_supplies = int(config.get_value("profile", "medical_supplies", 0))
 		shelter_level = int(config.get_value("profile", "shelter_level", 0))
 		looted_poi_ids = config.get_value("profile", "looted_poi_ids", looted_poi_ids)
 
@@ -1922,6 +1959,7 @@ func _save_profile() -> void:
 	config.set_value("profile", "wood", wood)
 	config.set_value("profile", "scrap", scrap)
 	config.set_value("profile", "food", food)
+	config.set_value("profile", "medical_supplies", medical_supplies)
 	config.set_value("profile", "shelter_level", shelter_level)
 	config.set_value("profile", "looted_poi_ids", looted_poi_ids)
 	config.save("user://survivor_profile.cfg")
@@ -1929,7 +1967,7 @@ func _save_profile() -> void:
 		wallet_label.text = "CRÉDITOS: %d" % credits
 	_update_mission_hud()
 	if is_instance_valid(resource_label):
-		resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d" % [wood, scrap, food]
+		resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d  |  MED %d" % [wood, scrap, food, medical_supplies]
 
 func _shop_catalog() -> Array[Dictionary]:
 	return [
