@@ -75,6 +75,11 @@ var tank_fire_cooldown := 0.0
 var tank_shells := 20
 var vehicle_health := 600.0
 var vehicle_max_health := 600.0
+var alien_ufo: Node3D
+var alien_wreck: Node3D
+var alien_story_found := false
+var alien_flight_phase := 0.0
+var alien_story_label: Label
 
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
@@ -132,6 +137,126 @@ func _ready() -> void:
 	_build_vehicle()
 	_build_hud()
 	_spawn_weapon_pickups()
+	_build_alien_mystery()
+
+
+func _build_alien_mystery() -> void:
+	# Disco voador distante: presença narrativa visível no céu, sem interromper a sobrevivência.
+	alien_ufo = Node3D.new()
+	alien_ufo.name = "UnidentifiedCraft"
+	add_child(alien_ufo)
+	alien_ufo.position = Vector3(-42.0, 34.0, -52.0)
+	var hull := MeshInstance3D.new()
+	var hull_mesh := CylinderMesh.new()
+	hull_mesh.top_radius = 3.2
+	hull_mesh.bottom_radius = 5.2
+	hull_mesh.height = 0.72
+	hull.mesh = hull_mesh
+	var hull_mat := StandardMaterial3D.new()
+	hull_mat.albedo_color = Color(0.22, 0.27, 0.29)
+	hull_mat.metallic = 0.88
+	hull_mat.roughness = 0.2
+	hull.material_override = hull_mat
+	alien_ufo.add_child(hull)
+	var dome := MeshInstance3D.new()
+	var dome_mesh := SphereMesh.new()
+	dome_mesh.radius = 1.45
+	dome_mesh.height = 1.8
+	dome.mesh = dome_mesh
+	dome.position.y = 0.62
+	var dome_mat := StandardMaterial3D.new()
+	dome_mat.albedo_color = Color(0.12, 0.55, 0.66, 0.72)
+	dome_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dome_mat.metallic = 0.55
+	dome_mat.emission_enabled = true
+	dome_mat.emission = Color(0.02, 0.34, 0.48)
+	dome_mat.emission_energy_multiplier = 1.8
+	dome.material_override = dome_mat
+	alien_ufo.add_child(dome)
+	for i in range(8):
+		var light_mesh := MeshInstance3D.new()
+		var light_shape := SphereMesh.new()
+		light_shape.radius = 0.22
+		light_shape.height = 0.44
+		light_mesh.mesh = light_shape
+		var angle := TAU * float(i) / 8.0
+		light_mesh.position = Vector3(cos(angle) * 4.25, -0.18, sin(angle) * 4.25)
+		var light_mat := StandardMaterial3D.new()
+		light_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		light_mat.albedo_color = Color(0.25, 0.9, 1.0)
+		light_mat.emission_enabled = true
+		light_mat.emission = Color(0.12, 0.75, 1.0)
+		light_mat.emission_energy_multiplier = 3.0
+		light_mesh.material_override = light_mat
+		alien_ufo.add_child(light_mesh)
+
+	# Local do impacto e primeiro fragmento de uma nave caída para exploração.
+	alien_wreck = Node3D.new()
+	alien_wreck.name = "AlienCrashSite"
+	add_child(alien_wreck)
+	var crash_x := -88.0
+	var crash_z := -82.0
+	alien_wreck.position = Vector3(crash_x, _height_at(crash_x, crash_z), crash_z)
+	var broken_hull := MeshInstance3D.new()
+	var broken_mesh := SphereMesh.new()
+	broken_mesh.radius = 3.8
+	broken_mesh.height = 1.8
+	broken_hull.mesh = broken_mesh
+	broken_hull.rotation_degrees = Vector3(8, 0, 24)
+	var broken_mat := StandardMaterial3D.new()
+	broken_mat.albedo_color = Color(0.12, 0.18, 0.2)
+	broken_mat.metallic = 0.92
+	broken_mat.roughness = 0.28
+	broken_hull.material_override = broken_mat
+	alien_wreck.add_child(broken_hull)
+	for i in range(3):
+		var shard := MeshInstance3D.new()
+		var shard_mesh := BoxMesh.new()
+		shard_mesh.size = Vector3(2.8, 0.28, 0.85)
+		shard.mesh = shard_mesh
+		shard.position = Vector3(-3.0 + float(i) * 3.0, 0.45, 2.0 if i % 2 == 0 else -2.0)
+		shard.rotation_degrees = Vector3(0, float(i) * 47.0, 18.0)
+		shard.material_override = broken_mat
+		alien_wreck.add_child(shard)
+	var core := MeshInstance3D.new()
+	var core_mesh := SphereMesh.new()
+	core_mesh.radius = 0.7
+	core_mesh.height = 1.4
+	core.mesh = core_mesh
+	core.position = Vector3(0, 1.2, 0)
+	var core_mat := StandardMaterial3D.new()
+	core_mat.albedo_color = Color(0.08, 0.7, 0.85)
+	core_mat.emission_enabled = true
+	core_mat.emission = Color(0.02, 0.55, 0.9)
+	core_mat.emission_energy_multiplier = 2.6
+	core.material_override = core_mat
+	alien_wreck.add_child(core)
+	var beacon := OmniLight3D.new()
+	beacon.position = Vector3(0, 2.0, 0)
+	beacon.light_color = Color(0.08, 0.62, 1.0)
+	beacon.light_energy = 2.0
+	beacon.omni_range = 12.0
+	alien_wreck.add_child(beacon)
+	var marker := Label3D.new()
+	marker.text = "DESTROÇOS DESCONHECIDOS"
+	marker.position = Vector3(0, 3.6, 0)
+	marker.font_size = 30
+	marker.modulate = Color(0.45, 0.88, 1.0)
+	alien_wreck.add_child(marker)
+	alien_story_label = marker
+	if alien_story_found:
+		marker.text = "SINAL DECODIFICADO • NÃO ESTAMOS SOZINHOS"
+
+
+func _update_alien_event(delta: float) -> void:
+	if not is_instance_valid(alien_ufo):
+		return
+	alien_flight_phase += delta * 0.11
+	alien_ufo.position.x = -42.0 + sin(alien_flight_phase) * 18.0
+	alien_ufo.position.z = -52.0 + cos(alien_flight_phase * 0.7) * 14.0
+	alien_ufo.position.y = 34.0 + sin(alien_flight_phase * 2.0) * 2.2
+	alien_ufo.rotation.y += delta * 0.16
+
 
 func _setup_environment() -> void:
 	world_environment = WorldEnvironment.new()
@@ -1004,6 +1129,16 @@ func _spawn_points_of_interest() -> void:
 		poi_cache_nodes.append({"id": str(data["id"]), "name": str(data["name"]), "node": cache})
 
 func _interact_with_wilderness() -> void:
+	if is_instance_valid(alien_wreck) and not alien_story_found and player.global_position.distance_to(alien_wreck.global_position) < 6.5:
+		alien_story_found = true
+		credits += 250
+		scrap += 12
+		medical_supplies += 2
+		_save_profile()
+		status_label.text = "ARQUIVO EXTRATERRESTRE RECUPERADO • NOVA AMEAÇA DESCOBERTA"
+		if is_instance_valid(alien_story_label):
+			alien_story_label.text = "SINAL DECODIFICADO • NÃO ESTAMOS SOZINHOS"
+		return
 	if collect_cooldown > 0.0:
 		return
 	var nearest_weapon_index := -1
@@ -2615,6 +2750,7 @@ func _load_profile() -> void:
 		tank_shells = int(config.get_value("profile", "tank_shells", 20))
 		shelter_level = int(config.get_value("profile", "shelter_level", 0))
 		looted_poi_ids = config.get_value("profile", "looted_poi_ids", looted_poi_ids)
+		alien_story_found = bool(config.get_value("profile", "alien_story_found", false))
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
@@ -2632,6 +2768,7 @@ func _save_profile() -> void:
 	config.set_value("profile", "tank_shells", tank_shells)
 	config.set_value("profile", "shelter_level", shelter_level)
 	config.set_value("profile", "looted_poi_ids", looted_poi_ids)
+	config.set_value("profile", "alien_story_found", alien_story_found)
 	config.save("user://survivor_profile.cfg")
 	if wallet_label:
 		wallet_label.text = "CRÉDITOS: %d" % credits
@@ -3386,6 +3523,7 @@ func _toggle_sprint() -> void:
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
 func _physics_process(delta: float) -> void:
+	_update_alien_event(delta)
 	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
 	movement_noise_timer = maxf(0.0, movement_noise_timer - delta)
 	footstep_noise_cooldown = maxf(0.0, footstep_noise_cooldown - delta)
