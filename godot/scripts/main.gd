@@ -1862,6 +1862,9 @@ func _update_infected(delta: float) -> void:
 			continue
 		var to_player := player.global_position - infected.global_position
 		var distance := Vector2(to_player.x, to_player.z).length()
+		var noise_offset := gunshot_noise_position - infected.global_position
+		var noise_distance := Vector2(noise_offset.x, noise_offset.z).length()
+		var heard_gunshot := gunshot_noise_timer > 0.0 and noise_distance < 70.0
 		if float(enemy_data.get("stagger_timer", 0.0)) > 0.0:
 			enemy_data["stagger_timer"] = maxf(0.0, float(enemy_data["stagger_timer"]) - delta)
 			var push: Vector3 = enemy_data.get("knockback", Vector3.ZERO)
@@ -1871,7 +1874,8 @@ func _update_infected(delta: float) -> void:
 			infected.move_and_slide()
 			enemy_data["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
 			continue
-		if bool(enemy_data.get("territorial", false)) and distance > float(enemy_data.get("activation_radius", 44.0)):
+		var territorial_dormant := bool(enemy_data.get("territorial", false)) and distance > float(enemy_data.get("activation_radius", 44.0))
+		if territorial_dormant and not heard_gunshot:
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
 			if infected.is_on_floor():
@@ -1880,8 +1884,11 @@ func _update_infected(delta: float) -> void:
 				infected.velocity.y -= 19.0 * delta
 			infected.move_and_slide()
 			continue
-		if distance > 1.55:
-			var direction := _steer_around_obstacles(infected.global_position, player.global_position)
+		var pursuit_target := gunshot_noise_position if territorial_dormant and heard_gunshot else player.global_position
+		var pursuit_offset := pursuit_target - infected.global_position
+		var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
+		if pursuit_distance > 1.55:
+			var direction := _steer_around_obstacles(infected.global_position, pursuit_target)
 			infected.velocity.x = direction.x * float(enemy_data["speed"])
 			infected.velocity.z = direction.z * float(enemy_data["speed"])
 			infected.rotation.y = lerp_angle(infected.rotation.y, atan2(-direction.x, -direction.z), delta * 3.0)
