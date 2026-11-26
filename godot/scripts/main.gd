@@ -1740,6 +1740,33 @@ func _has_line_of_sight(shooter: CharacterBody3D, target: CharacterBody3D) -> bo
 
 
 
+func _find_hostile_cover_position(npc: CharacterBody3D, target: CharacterBody3D) -> Vector3:
+	var npc_point := Vector2(npc.global_position.x, npc.global_position.z)
+	var target_point := Vector2(target.global_position.x, target.global_position.z)
+	var line := target_point - npc_point
+	var line_length_sq := maxf(0.01, line.length_squared())
+	var best_position := npc.global_position
+	var best_distance := INF
+	var found_cover := false
+	for obstacle in environment_obstacles:
+		var obstacle_point: Vector2 = obstacle["position"]
+		var projection := clampf((obstacle_point - npc_point).dot(line) / line_length_sq, 0.12, 0.88)
+		var closest_on_line := npc_point + line * projection
+		var radius := float(obstacle["radius"])
+		if obstacle_point.distance_to(closest_on_line) > radius + 1.1:
+			continue
+		var away_from_target := (obstacle_point - target_point).normalized()
+		if away_from_target.length() < 0.1:
+			continue
+		var candidate := obstacle_point + away_from_target * (radius + 1.65)
+		var candidate_distance := candidate.distance_to(npc_point)
+		if candidate_distance < 1.0 or candidate_distance > 14.0 or candidate_distance >= best_distance:
+			continue
+		best_distance = candidate_distance
+		best_position = Vector3(candidate.x, _height_at(candidate.x, candidate.y), candidate.y)
+		found_cover = true
+	return best_position if found_cover else npc.global_position
+
 func _update_hostile_factions(delta: float) -> void:
 	for faction_key in faction_alerts.keys():
 		var alert_data: Dictionary = faction_alerts[faction_key]
@@ -1789,9 +1816,14 @@ func _update_hostile_factions(delta: float) -> void:
 			var flank_angle := float(squad_slot) * TAU / 3.0
 			var flank_radius := 8.0 + float(squad_slot % 2) * 3.0
 			var tactical_target := pursuit_target + Vector3(cos(flank_angle) * flank_radius, 0.0, sin(flank_angle) * flank_radius)
-			# Combatentes muito feridos tentam recuar para o próprio acampamento,
-			# em vez de avançar cegamente até serem eliminados.
+			# Feridos procuram cobertura atrás de árvores, rochas e outros obstáculos.
 			var retreating := health_ratio < 0.28
+			var using_cover := false
+			if health_ratio < 0.68 and not retreating:
+				var cover_position := _find_hostile_cover_position(npc, player)
+				if cover_position != npc.global_position:
+					tactical_target = cover_position
+					using_cover = true
 			if retreating:
 				var camp_center: Vector2 = hostile.get("camp_center", Vector2(npc.global_position.x, npc.global_position.z))
 				tactical_target = Vector3(camp_center.x, _height_at(camp_center.x, camp_center.y), camp_center.y)
@@ -1833,10 +1865,15 @@ func _update_hostile_factions(delta: float) -> void:
 						hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
 			else:
 				hostile["aiming"] = false
-				# Sem linha de visão: aproxima-se para procurar outro ângulo.
-				var flank := _steer_around_obstacles(npc.global_position, player.global_position)
-				npc.velocity.x = flank.x * float(hostile["speed"])
-				npc.velocity.z = flank.z * float(hostile["speed"])
+				if using_cover or retreating:
+					# Mantém a posição protegida ou continua a retirada sem se expor.
+					npc.velocity.x = move_toward(npc.velocity.x, 0.0, 7.0 * delta)
+					npc.velocity.z = move_toward(npc.velocity.z, 0.0, 7.0 * delta)
+				else:
+					# Sem cobertura disponível: procura outro ângulo de aproximação.
+					var flank := _steer_around_obstacles(npc.global_position, player.global_position)
+					npc.velocity.x = flank.x * float(hostile["speed"])
+					npc.velocity.z = flank.z * float(hostile["speed"])
 				hostile["fire_timer"] = maxf(0.2, float(hostile["fire_timer"]))
 		else:
 			# Patrulha leve em torno do esconderijo quando não há ameaça próxima.
