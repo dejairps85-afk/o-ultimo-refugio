@@ -72,6 +72,8 @@ var boat: CharacterBody3D
 var boat_active := false
 var boat_toggle_button: Button
 var boat_speed := 0.0
+var fishing_cooldown := 0.0
+var wilderness_button: Button
 
 func _ready() -> void:
 	rng.randomize()
@@ -249,6 +251,43 @@ func _build_river() -> void:
 	water.mesh = river_mesh
 	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(water)
+	_build_river_bridge()
+
+func _build_river_bridge() -> void:
+	var bridge := StaticBody3D.new()
+	bridge.name = "RiverCrossingBridge"
+	var z := 14.0
+	var center_x := _river_center_x(z)
+	bridge.position = Vector3(center_x, _river_surface_y(z) + 0.48, z)
+	var deck := MeshInstance3D.new()
+	var deck_mesh := BoxMesh.new()
+	deck_mesh.size = Vector3(12.2, 0.22, 1.7)
+	deck.mesh = deck_mesh
+	deck.material_override = _make_material(Color(0.30, 0.19, 0.11), 0.88)
+	bridge.add_child(deck)
+	var deck_collision := CollisionShape3D.new()
+	var deck_shape := BoxShape3D.new()
+	deck_shape.size = deck_mesh.size
+	deck_collision.shape = deck_shape
+	deck_collision.position.y = 0.08
+	bridge.add_child(deck_collision)
+	for side in [-1.0, 1.0]:
+		var rail := MeshInstance3D.new()
+		var rail_mesh := BoxMesh.new()
+		rail_mesh.size = Vector3(12.2, 0.16, 0.12)
+		rail.mesh = rail_mesh
+		rail.position = Vector3(0, 0.68, side * 0.78)
+		rail.material_override = _make_material(Color(0.22, 0.15, 0.09))
+		bridge.add_child(rail)
+		for x_offset in [-5.5, 5.5]:
+			var post := MeshInstance3D.new()
+			var post_mesh := BoxMesh.new()
+			post_mesh.size = Vector3(0.16, 0.9, 0.16)
+			post.mesh = post_mesh
+			post.position = Vector3(x_offset, 0.34, side * 0.78)
+			post.material_override = _make_material(Color(0.20, 0.13, 0.08))
+			bridge.add_child(post)
+	add_child(bridge)
 
 func _spawn_wildlife() -> void:
 	var species := ["CERVO", "JAVALI", "COELHO"]
@@ -505,6 +544,34 @@ func _spawn_resource_nodes() -> void:
 		node.add_child(mesh_node)
 		add_child(node)
 		resource_nodes.append({"node": node, "kind": kind, "amount": rng.randi_range(2, 4)})
+
+
+func _interact_with_wilderness() -> void:
+	if collect_cooldown > 0.0:
+		return
+	var nearest_resource := 999.0
+	for data in resource_nodes:
+		var node := data["node"] as Node3D
+		if is_instance_valid(node):
+			nearest_resource = minf(nearest_resource, player.global_position.distance_to(node.global_position))
+	if nearest_resource < 2.8:
+		_collect_nearby_resource()
+		return
+	var river_distance := absf(player.global_position.x - _river_center_x(player.global_position.z))
+	if river_distance < 9.0 and not boat_active:
+		if fishing_cooldown > 0.0:
+			status_label.text = "AGUARDE PARA TENTAR PESCAR NOVAMENTE"
+			return
+		fishing_cooldown = 7.0
+		if rng.randf() <= 0.72:
+			var catch_amount := rng.randi_range(1, 2)
+			food += catch_amount
+			status_label.text = "PESCARIA: +%d PEIXE(S)" % catch_amount
+			_save_profile()
+		else:
+			status_label.text = "OS PEIXES NÃO MORDERAM A ISCA. TENTE NOVAMENTE"
+		return
+	_collect_nearby_resource()
 
 func _collect_nearby_resource() -> void:
 	if collect_cooldown > 0.0:
@@ -1053,6 +1120,20 @@ func _update_infected(delta: float) -> void:
 					_update_mission_hud()
 					_save_profile()
 					infected.queue_free()
+		for wildlife_index in range(wildlife.size() - 1, -1, -1):
+			var animal_data: Dictionary = wildlife[wildlife_index]
+			var animal := animal_data["node"] as Node3D
+			if not is_instance_valid(animal):
+				continue
+			var animal_offset := animal.global_position - player.global_position
+			var animal_distance := Vector2(animal_offset.x, animal_offset.z).length()
+			var animal_direction := Vector3(animal_offset.x, 0.0, animal_offset.z).normalized()
+			if animal_distance < 3.0 and forward.dot(animal_direction) > 0.0:
+				food += 2 if str(animal_data["kind"]) == "JAVALI" else 1
+				animal.queue_free()
+				wildlife.remove_at(wildlife_index)
+				_save_profile()
+				status_label.text = "CAÇA: CARNE ADICIONADA AO ESTOQUE"
 
 func _award_infected_kill() -> void:
 	credits += 15
@@ -1195,6 +1276,19 @@ func _build_hud() -> void:
 	boat_toggle_button.offset_bottom = -95
 	boat_toggle_button.pressed.connect(_toggle_boat)
 	layer.add_child(boat_toggle_button)
+	wilderness_button = Button.new()
+	wilderness_button.text = "INTERAGIR"
+	wilderness_button.custom_minimum_size = Vector2(132, 54)
+	wilderness_button.anchor_left = 1.0
+	wilderness_button.anchor_right = 1.0
+	wilderness_button.anchor_top = 1.0
+	wilderness_button.anchor_bottom = 1.0
+	wilderness_button.offset_left = -300
+	wilderness_button.offset_right = -160
+	wilderness_button.offset_top = -88
+	wilderness_button.offset_bottom = -28
+	wilderness_button.pressed.connect(_interact_with_wilderness)
+	layer.add_child(wilderness_button)
 	var jump_button := Button.new()
 	jump_button.text = "PULAR"
 	jump_button.custom_minimum_size = Vector2(112, 58)
@@ -1605,7 +1699,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if is_instance_valid(boat) and not boat_active and player.global_position.distance_to(boat.global_position) <= 5.0:
 			_toggle_boat()
 		else:
-			_collect_nearby_resource()
+			_interact_with_wilderness()
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if event.position.x < get_viewport().get_visible_rect().size.x * 0.48 and event.position.y > get_viewport().get_visible_rect().size.y * 0.35:
@@ -1778,6 +1872,8 @@ func _trigger_game_over() -> void:
 func _physics_process(delta: float) -> void:
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
+	if fishing_cooldown > 0.0:
+		fishing_cooldown = maxf(0.0, fishing_cooldown - delta)
 	if not is_instance_valid(player) or game_over:
 		return
 	_update_day_night(delta)
