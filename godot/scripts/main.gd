@@ -23,6 +23,10 @@ var enemies: Array = []
 var environment_obstacles: Array[Dictionary] = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
+var stamina := 100.0
+var sprint_enabled := false
+var stamina_bar: ProgressBar
+var sprint_button: Button
 var player_attack_cooldown := 0.0
 var player_attack_anim_time := 0.0
 var game_over := false
@@ -1242,6 +1246,15 @@ func _build_hud() -> void:
 	health_bar.custom_minimum_size = Vector2(210, 18)
 	health_bar.position = Vector2(22, 76)
 	layer.add_child(health_bar)
+	stamina_bar = ProgressBar.new()
+	stamina_bar.min_value = 0
+	stamina_bar.max_value = 100
+	stamina_bar.value = stamina
+	stamina_bar.show_percentage = false
+	stamina_bar.custom_minimum_size = Vector2(150, 12)
+	stamina_bar.position = Vector2(244, 79)
+	stamina_bar.modulate = Color(0.72, 0.88, 0.62)
+	layer.add_child(stamina_bar)
 	game_over_label = Label.new()
 	game_over_label.text = "VOCÊ FOI DERROTADO"
 	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -1317,6 +1330,19 @@ func _build_hud() -> void:
 	jump_button.offset_bottom = -94
 	jump_button.pressed.connect(func(): jump_requested = true)
 	layer.add_child(jump_button)
+	sprint_button = Button.new()
+	sprint_button.text = "CORRER: OFF"
+	sprint_button.custom_minimum_size = Vector2(112, 54)
+	sprint_button.anchor_left = 1.0
+	sprint_button.anchor_right = 1.0
+	sprint_button.anchor_top = 1.0
+	sprint_button.anchor_bottom = 1.0
+	sprint_button.offset_left = -144
+	sprint_button.offset_right = -24
+	sprint_button.offset_top = -88
+	sprint_button.offset_bottom = -28
+	sprint_button.pressed.connect(_toggle_sprint)
+	layer.add_child(sprint_button)
 	wallet_label = Label.new()
 	wallet_label.text = "CRÉDITOS: %d" % credits
 	wallet_label.position = Vector2(22, 102)
@@ -1884,6 +1910,11 @@ func _trigger_game_over() -> void:
 	restart_button.visible = true
 	status_label.text = "FIM DE JOGO"
 
+func _toggle_sprint() -> void:
+	sprint_enabled = not sprint_enabled
+	if is_instance_valid(sprint_button):
+		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
+
 func _physics_process(delta: float) -> void:
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
@@ -1923,9 +1954,20 @@ func _physics_process(delta: float) -> void:
 	right.y = 0
 	right = right.normalized()
 	var direction := (right * input_dir.x + forward * -input_dir.y).normalized()
-	if direction.length() > 0.05:
-		player.velocity.x = direction.x * PLAYER_SPEED
-		player.velocity.z = direction.z * PLAYER_SPEED
+	var moving := direction.length() > 0.05
+	var sprinting := sprint_enabled and moving and stamina > 0.0
+	if sprinting:
+		stamina = maxf(0.0, stamina - 24.0 * delta)
+	else:
+		stamina = minf(100.0, stamina + (13.0 if moving else 21.0) * delta)
+	if stamina <= 0.0 and sprint_enabled:
+		sprint_enabled = false
+		if is_instance_valid(sprint_button):
+			sprint_button.text = "CORRER: OFF"
+	var movement_speed := PLAYER_SPEED * (1.65 if sprinting else 1.0)
+	if moving:
+		player.velocity.x = direction.x * movement_speed
+		player.velocity.z = direction.z * movement_speed
 		player.rotation.y = lerp_angle(player.rotation.y, atan2(-direction.x, -direction.z), delta * 9.0)
 	else:
 		player.velocity.x = move_toward(player.velocity.x, 0.0, PLAYER_SPEED * 5.0 * delta)
@@ -1957,6 +1999,8 @@ func _physics_process(delta: float) -> void:
 		player.velocity = Vector3.ZERO
 	if health_bar:
 		health_bar.value = player_health
+	if stamina_bar:
+		stamina_bar.value = stamina
 	if status_label and player_health > 0.0 and _attack_feedback_time <= 0.0:
 		status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), _alive_enemy_count()]
 	if _attack_feedback_time > 0.0:
