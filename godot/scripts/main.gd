@@ -33,6 +33,9 @@ var mission_label: Label
 var mission_kills := 0
 var mission_goal := 5
 var mission_reward_claimed := false
+var wave_number := 1
+var wave_intermission := -1.0
+var wave_label: Label
 var shop_panel: PanelContainer
 var shop_list: VBoxContainer
 var shop_open := false
@@ -203,7 +206,7 @@ func _scatter_environment() -> void:
 		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.0 * instance.scale.x})
 		_add_rock_collision(instance)
 		add_child(instance)
-	for i in range(7):
+	for i in range(count):
 		if stump_scene:
 			var x := rng.randf_range(-92, 92)
 			var z := rng.randf_range(-92, 92)
@@ -406,7 +409,7 @@ func _build_player() -> void:
 	camera.current = true
 	camera_pivot.add_child(camera)
 
-func _spawn_infected() -> void:
+func _spawn_infected(count: int = 7) -> void:
 	var variants := [
 		"res://assets/models/infected/zombie-walker.glb",
 		"res://assets/models/infected/zombie-runner.glb",
@@ -434,15 +437,17 @@ func _spawn_infected() -> void:
 		enemy.add_child(visual)
 		_fit_model_height(visual, 1.9 if i % variants.size() != 2 else 2.15)
 		var angle := rng.randf_range(0.0, TAU)
-		var distance := rng.randf_range(22.0, 38.0)
-		var spawn_x := cos(angle) * distance
-		var spawn_z := sin(angle) * distance
+		var distance := rng.randf_range(24.0, 42.0)
+		var center := player.global_position if is_instance_valid(player) else Vector3.ZERO
+		var spawn_x := center.x + cos(angle) * distance
+		var spawn_z := center.z + sin(angle) * distance
 		enemy.position = Vector3(spawn_x, _height_at(spawn_x, spawn_z) + 0.08, spawn_z)
 		enemy.rotation.y = rng.randf_range(0.0, TAU)
 		add_child(enemy)
 		var animator := _find_animation_player(visual)
 		_play_best_animation(animator, ["idle", "walk", "move"])
-		enemies.append({"node": enemy, "anim": animator, "health": 100.0, "speed": rng.randf_range(1.0, 1.8), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
+		var difficulty := 1.0 + float(wave_number - 1) * 0.10
+		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
 
 func _steer_around_obstacles(from_position: Vector3, target_position: Vector3) -> Vector3:
 	var desired := Vector3(target_position.x - from_position.x, 0.0, target_position.z - from_position.z).normalized()
@@ -524,6 +529,29 @@ func _alive_enemy_count() -> int:
 			alive_count += 1
 	return alive_count
 
+func _update_wave_hud() -> void:
+	if not is_instance_valid(wave_label):
+		return
+	if wave_intermission >= 0.0:
+		wave_label.text = "ONDA %d  •  PRÓXIMA HORDA EM %d s" % [wave_number, ceili(wave_intermission)]
+	else:
+		wave_label.text = "ONDA %d  •  INFECTADOS RESTANTES: %d" % [wave_number, _alive_enemy_count()]
+
+func _update_wave_director(delta: float) -> void:
+	if wave_intermission < 0.0 and _alive_enemy_count() == 0:
+		wave_intermission = 10.0
+		_update_wave_hud()
+		return
+	if wave_intermission >= 0.0:
+		wave_intermission = maxf(0.0, wave_intermission - delta)
+		_update_wave_hud()
+		if wave_intermission <= 0.0:
+			wave_number += 1
+			wave_intermission = -1.0
+			var next_wave_count := mini(3 + wave_number * 2, 13)
+			_spawn_infected(next_wave_count)
+			_update_wave_hud()
+
 func _update_mission_hud() -> void:
 	if not is_instance_valid(mission_label):
 		return
@@ -604,8 +632,14 @@ func _build_hud() -> void:
 	wallet_label.add_theme_font_size_override("font_size", 17)
 	wallet_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.32))
 	layer.add_child(wallet_label)
+	wave_label = Label.new()
+	wave_label.position = Vector2(22, 126)
+	wave_label.add_theme_font_size_override("font_size", 15)
+	wave_label.add_theme_color_override("font_color", Color(0.92, 0.55, 0.32))
+	layer.add_child(wave_label)
+	_update_wave_hud()
 	mission_label = Label.new()
-	mission_label.position = Vector2(22, 126)
+	mission_label.position = Vector2(22, 148)
 	mission_label.add_theme_font_size_override("font_size", 15)
 	mission_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
 	layer.add_child(mission_label)
@@ -614,13 +648,13 @@ func _build_hud() -> void:
 	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
 	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
 	vehicle_toggle_button.custom_minimum_size = Vector2(190, 42)
-	vehicle_toggle_button.position = Vector2(22, 218)
+	vehicle_toggle_button.position = Vector2(22, 240)
 	vehicle_toggle_button.pressed.connect(_toggle_vehicle)
 	layer.add_child(vehicle_toggle_button)
 	var shop_button := Button.new()
 	shop_button.text = "LOJA / INVENTÁRIO"
 	shop_button.custom_minimum_size = Vector2(190, 48)
-	shop_button.position = Vector2(22, 164)
+	shop_button.position = Vector2(22, 186)
 	shop_button.pressed.connect(_toggle_shop)
 	layer.add_child(shop_button)
 	var attack_button := Button.new()
@@ -973,6 +1007,7 @@ func _trigger_game_over() -> void:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player) or game_over:
 		return
+	_update_wave_director(delta)
 	if vehicle_active:
 		_update_vehicle(delta)
 		_update_infected(delta)
