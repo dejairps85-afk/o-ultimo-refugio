@@ -58,6 +58,16 @@ jobs:
           EOF
           keytool -genkeypair -v -keystore build/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=O Ultimo Refugio,C=BR"
 
+      - name: Normalizar modelos 3D para compatibilidade Godot
+        run: |
+          npx --yes @gltf-transform/cli --help >/dev/null
+          while IFS= read -r -d '' file; do
+            temp="${file%.glb}.normalized.glb"
+            npx --yes @gltf-transform/cli decompress "$file" "$temp"
+            npx --yes @gltf-transform/cli dequantize "$temp" "$file"
+            rm -f "$temp"
+          done < <(find assets -type f -name '*.glb' -print0)
+
       - name: Importar recursos e validar projeto
         run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --import --quit
 
