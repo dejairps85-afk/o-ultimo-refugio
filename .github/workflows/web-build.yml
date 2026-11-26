@@ -99,7 +99,7 @@ jobs:
             console.log('BROWSER_STATE='+JSON.stringify(state));
             console.log('BROWSER_ERRORS='+JSON.stringify(errors));
             if (!state.canvas.length || !state.canvas.some(c=>c.width>0 && c.height>0)) throw new Error('Godot não criou um canvas válido no Chromium.');
-            if (errors.some(e=>/wasm|webgl|uncaught|failed to load|out of memory/i.test(e))) throw new Error('Erros relevantes no navegador: '+errors.join(' | '));
+            if (errors.some(e=>/wasm|webgl|uncaught|failed to load|cannot open file|failed loading resource|failed loading scene|script error|parse error|out of memory/i.test(e))) throw new Error('Erros relevantes no navegador: '+errors.join(' | '));
           } finally { await browser.close(); }
           NODE
 
