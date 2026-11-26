@@ -351,7 +351,7 @@ try{
   const resources=[];const rand=(a,b)=>a+Math.random()*(b-a);
   const barkMats=[mat(0x59402c),mat(0x6b4b32),mat(0x4d3929)],leafMats=[mat(0x244b35),mat(0x315c3c),mat(0x3d6942),mat(0x496f43)],rockMats=[mat(0x737b78),mat(0x85877d),mat(0x626c69)],bushMats=[mat(0x547b3d),mat(0x668d48),mat(0x78964d)];
   barkMats.forEach(m=>{m.map=barkTexture;m.bumpMap=barkBump;m.bumpScale=.12;m.roughness=.96;});leafMats.forEach(m=>{m.map=leafTexture;m.bumpMap=leafTexture;m.bumpScale=.035;m.roughness=.92;});bushMats.forEach(m=>{m.map=leafTexture;m.roughness=.94;});
-  loadPBRSet('eucalyptus_bark',barkMats,1,2.5);loadPBRSet('dark_rock',rockMats,1.6,1.6);
+  loadPBRSet('eucalyptus_bark',barkMats,1,2.5);loadPBRSet('dark_rock',[rockMats[0]],1.6,1.6);loadPBRSet('rocky_terrain_02',[rockMats[1],rockMats[2]],1.6,1.6);
   const trunkGeo=new THREE.CylinderGeometry(.18,.3,1,7),pineGeo=new THREE.ConeGeometry(1,1,7),crownGeo=new THREE.IcosahedronGeometry(1,0),rockGeo=new THREE.DodecahedronGeometry(1,0),bushGeo=new THREE.IcosahedronGeometry(1,0),grassGeo=new THREE.ConeGeometry(.075,1,4);
   const grassBatches=leafMats.map(()=>[]),grassDummy=new THREE.Object3D();
   const treeCandidates=[];
