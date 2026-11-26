@@ -7,7 +7,7 @@
 <style>
 :root{--ctrl-scale:1;--ctrl-alpha:.9}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;color:#eef4ee;font-family:system-ui,-apple-system,Arial,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101820;color:#eef4ee;font-family:system-ui,-apple-system,Arial,sans-serif;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;overscroll-behavior:none}
 input,select,button{-webkit-user-select:auto;user-select:auto}
 canvas{display:block;touch-action:none}
 #compass{position:fixed;top:max(8px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:5;background:#0e171cd9;border:1px solid #ffffff24;border-radius:999px;padding:4px 14px;font-size:11px;font-weight:700;letter-spacing:.12em;color:#dbe7df;pointer-events:none;white-space:nowrap}
@@ -50,25 +50,25 @@ h1{font-size:12px;margin:0;letter-spacing:.05em;white-space:nowrap;overflow:hidd
 #touch-layer.active{display:block}
 #cam-zone{position:fixed;top:0;right:0;width:56vw;height:100vh;pointer-events:auto;touch-action:none}
 #joy-zone{position:fixed;left:max(14px,env(safe-area-inset-left));bottom:max(16px,env(safe-area-inset-bottom));width:calc(126px * var(--ctrl-scale));height:calc(126px * var(--ctrl-scale));border-radius:50%;background:#0c151b;border:2px solid #ffffff3a;opacity:var(--ctrl-alpha);pointer-events:auto;touch-action:none;display:flex;align-items:center;justify-content:center}
-#joy-knob{width:calc(48px * var(--ctrl-scale));height:calc(48px * var(--ctrl-scale));border-radius:50%;background:#c5e36b;border:2px solid #172018;transform:translate(0px,0px);pointer-events:none}
+#joy-knob{width:calc(48px * var(--ctrl-scale));height:calc(48px * var(--ctrl-scale));border-radius:50%;background:#c5e36b;border:2px solid #172018;transform:translate(0px,0px);pointer-events:none;will-change:transform}
 #action-pad{position:fixed;right:max(12px,env(safe-area-inset-right));bottom:max(14px,env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:calc(7px * var(--ctrl-scale));pointer-events:auto;touch-action:none;opacity:var(--ctrl-alpha);max-width:64vw}
 .act-btn{min-width:calc(58px * var(--ctrl-scale));min-height:calc(44px * var(--ctrl-scale));padding:5px 6px;border-radius:11px;border:1px solid #ffffff36;background:#111f26d4;color:#f2f7f3;font-weight:800;font-size:calc(10px * var(--ctrl-scale));letter-spacing:.02em;touch-action:none;cursor:pointer}
 .act-btn.primary{background:#c5e36b;color:#172018;border-color:#c5e36b}
 .act-btn.active-hold{outline:2px solid #c5e36b;background:#284122}
-#debugGame{position:fixed;bottom:max(8px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:99999;background:#202b35e6;color:#fff;padding:8px 10px;border-radius:10px;font:11px monospace;max-width:min(340px,92vw);max-height:90px;overflow:auto;display:none}
+#debugGame{position:fixed;top:max(40px,calc(env(safe-area-inset-top) + 30px));right:max(10px,env(safe-area-inset-right));z-index:99999;background:#202b35e6;color:#fff;padding:6px 9px;border-radius:8px;font:10px monospace;max-width:min(220px,55vw);max-height:70px;overflow:auto;display:none;pointer-events:none}
 @media (max-width:600px){#hud{width:min(198px,calc(100vw - 24px));padding:7px 9px}#compass{font-size:10px;padding:3px 10px}#hint{display:none}}
 </style>
 </head>
 <body>
 <div id="debugGame">DIAGNÓSTICO: carregando motor 3D...</div>
 <script>
-function reportGameError(msg){const box=document.getElementById('debugGame');if(box){box.style.display='block';box.innerHTML='<b>ERRO NO JOGO:</b><br>'+msg;}}
+function reportGameError(msg){const box=document.getElementById('debugGame');if(box){box.style.display='block';box.innerHTML='<b>ERRO:</b> '+msg;}}
 window.addEventListener('error',e=>reportGameError(e.message));
 window.addEventListener('unhandledrejection',e=>reportGameError(String(e.reason)));
 </script>
 <div id="compass">N · NE · <b id="compass-dir">N</b> · NO · S</div>
 <div id="hud">
-  <div class="hud-top"><h1 id="hud-title">O ÚLTIMO REFÚGIO <span style="color:#c5e36b">/ 0.3</span></h1><button class="hud-menu-btn" id="btn-open-menu" type="button">MENU</button></div>
+  <div class="hud-top"><h1 id="hud-title">O ÚLTIMO REFÚGIO <span style="color:#c5e36b">/ 0.3.1</span></h1><button class="hud-menu-btn" id="btn-open-menu" type="button">MENU</button></div>
   <div class="stat"><span>VIDA</span><b id="hpv">100</b></div><div class="track"><div id="hp" class="fill" style="background:#e45e55"></div></div>
   <div class="stat"><span>FOME</span><b id="foodv">100</b></div><div class="track"><div id="food" class="fill" style="background:#e5b34f"></div></div>
   <div class="stat"><span>SEDE</span><b id="waterv">100</b></div><div class="track"><div id="water" class="fill" style="background:#54b9df"></div></div>
@@ -224,26 +224,29 @@ try{
   addEventListener('keydown',e=>{keys[e.code]=true;if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();});
   addEventListener('keyup',e=>{keys[e.code]=false;});
   let yaw=0,camDist=8,pitch=0.24,camPointerId=null,lastCamX=0,lastCamY=0;
-  function startCamDrag(e){if(camPointerId!==null)return;camPointerId=e.pointerId;lastCamX=e.clientX;lastCamY=e.clientY;try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}}
-  function moveCamDrag(e){if(e.pointerId!==camPointerId)return;const sens=Number(settings.camSens??1.0);yaw-=(e.clientX-lastCamX)*0.006*sens;pitch=Math.max(-0.05,Math.min(0.75,pitch+(e.clientY-lastCamY)*0.003*sens));lastCamX=e.clientX;lastCamY=e.clientY;updateCompass();}
+  function startCamDrag(e){if(camPointerId!==null||e.pointerId===joyPointerId)return;e.preventDefault();camPointerId=e.pointerId;lastCamX=e.clientX;lastCamY=e.clientY;try{e.currentTarget.setPointerCapture(e.pointerId);}catch(_){}}
+  function moveCamDrag(e){if(e.pointerId!==camPointerId)return;e.preventDefault();const sens=Number(settings.camSens??1.0);yaw-=(e.clientX-lastCamX)*0.006*sens;pitch=Math.max(-0.05,Math.min(0.75,pitch+(e.clientY-lastCamY)*0.003*sens));lastCamX=e.clientX;lastCamY=e.clientY;updateCompass();}
   function endCamDrag(e){if(e.pointerId===camPointerId)camPointerId=null;}
-  renderer.domElement.addEventListener('pointerdown',startCamDrag);renderer.domElement.addEventListener('pointermove',moveCamDrag);renderer.domElement.addEventListener('pointerup',endCamDrag);renderer.domElement.addEventListener('pointercancel',endCamDrag);
-  const camZone=document.getElementById('cam-zone');camZone.addEventListener('pointerdown',startCamDrag);camZone.addEventListener('pointermove',moveCamDrag);camZone.addEventListener('pointerup',endCamDrag);camZone.addEventListener('pointercancel',endCamDrag);
+  renderer.domElement.addEventListener('pointerdown',startCamDrag);renderer.domElement.addEventListener('pointermove',moveCamDrag);renderer.domElement.addEventListener('pointerup',endCamDrag);renderer.domElement.addEventListener('pointercancel',endCamDrag);renderer.domElement.addEventListener('lostpointercapture',endCamDrag);
+  const camZone=document.getElementById('cam-zone');camZone.addEventListener('pointerdown',startCamDrag);camZone.addEventListener('pointermove',moveCamDrag);camZone.addEventListener('pointerup',endCamDrag);camZone.addEventListener('pointercancel',endCamDrag);camZone.addEventListener('lostpointercapture',endCamDrag);
   const joyZone=document.getElementById('joy-zone');const joyKnob=document.getElementById('joy-knob');let joyPointerId=null;let joyVec={x:0,y:0};
-  function updateJoystick(clientX,clientY){const rect=joyZone.getBoundingClientRect();const cx=rect.left+rect.width/2;const cy=rect.top+rect.height/2;const maxR=Math.max(24,rect.width*0.36);const jSens=Number(settings.joySens??1.0);let dx=(clientX-cx)*jSens;let dy=(clientY-cy)*jSens;const dist=Math.hypot(dx,dy);if(dist>maxR){dx=(dx/dist)*maxR;dy=(dy/dist)*maxR;}joyKnob.style.transform=`translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;joyVec.x=Math.max(-1,Math.min(1,dx/maxR));joyVec.y=Math.max(-1,Math.min(1,dy/maxR));}
-  function resetJoystick(){joyPointerId=null;joyVec.x=0;joyVec.y=0;joyKnob.style.transform='translate(0px, 0px)';}
-  joyZone.addEventListener('pointerdown',e=>{e.stopPropagation();if(joyPointerId!==null)return;joyPointerId=e.pointerId;try{joyZone.setPointerCapture(e.pointerId);}catch(_){}updateJoystick(e.clientX,e.clientY);});
-  joyZone.addEventListener('pointermove',e=>{if(e.pointerId!==joyPointerId)return;updateJoystick(e.clientX,e.clientY);});
-  joyZone.addEventListener('pointerup',e=>{if(e.pointerId===joyPointerId)resetJoystick();});
-  joyZone.addEventListener('pointercancel',e=>{if(e.pointerId===joyPointerId)resetJoystick();});
-  let touchSprintHeld=false;const btnRun=document.getElementById('btn-run');btnRun.addEventListener('pointerdown',e=>{e.stopPropagation();touchSprintHeld=!touchSprintHeld;btnRun.classList.toggle('active-hold',touchSprintHeld);});
-  document.getElementById('btn-jump').addEventListener('pointerdown',e=>{e.stopPropagation();triggerJump();});
-  document.getElementById('btn-attack').addEventListener('pointerdown',e=>{e.stopPropagation();attack();});
-  document.getElementById('btn-interact').addEventListener('pointerdown',e=>{e.stopPropagation();interactAction();});
-  document.getElementById('btn-collect').addEventListener('pointerdown',e=>{e.stopPropagation();collect();});
-  document.getElementById('btn-eat').addEventListener('pointerdown',e=>{e.stopPropagation();eatBerries();});
-  document.getElementById('btn-drink').addEventListener('pointerdown',e=>{e.stopPropagation();drinkWater();});
-  function gameOver(win=false){dead=true;started=false;touchLayerEl.classList.remove('active');overlayEl.style.display='flex';document.querySelector('.panel').innerHTML=win?'<h2>VOCÊ SOBREVIVEU!</h2><p style="text-align:center">Três dias no mundo hostil. Este é apenas o começo da sua jornada.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">JOGAR NOVAMENTE</button></div>':'<h2>FIM DA JORNADA</h2><p style="text-align:center">Você não conseguiu sobreviver. Reúna recursos e tente novamente.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">TENTAR NOVAMENTE</button></div>';}
+  function updateJoystick(clientX,clientY){const rect=joyZone.getBoundingClientRect();const cx=rect.left+rect.width/2;const cy=rect.top+rect.height/2;const maxR=Math.max(24,rect.width*0.36);const jSens=Number(settings.joySens??1.0);let dx=(clientX-cx)*jSens;let dy=(clientY-cy)*jSens;const dist=Math.hypot(dx,dy);if(dist>maxR){dx=(dx/dist)*maxR;dy=(dy/dist)*maxR;}joyKnob.style.transform=`translate3d(${dx.toFixed(1)}px, ${dy.toFixed(1)}px, 0px)`;joyVec.x=Math.max(-1,Math.min(1,dx/maxR));joyVec.y=Math.max(-1,Math.min(1,dy/maxR));}
+  function resetJoystick(e){if(e&&e.pointerId!==undefined&&joyPointerId!==null&&e.pointerId!==joyPointerId)return;joyPointerId=null;joyVec.x=0;joyVec.y=0;joyKnob.style.transform='translate3d(0px, 0px, 0px)';}
+  joyZone.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();if(joyPointerId!==null)return;joyPointerId=e.pointerId;try{joyZone.setPointerCapture(e.pointerId);}catch(_){}updateJoystick(e.clientX,e.clientY);});
+  joyZone.addEventListener('pointermove',e=>{if(e.pointerId!==joyPointerId)return;e.preventDefault();updateJoystick(e.clientX,e.clientY);});
+  joyZone.addEventListener('pointerup',resetJoystick);
+  joyZone.addEventListener('pointercancel',resetJoystick);
+  joyZone.addEventListener('lostpointercapture',resetJoystick);
+  let touchSprintHeld=false;const btnRun=document.getElementById('btn-run');
+  function bindActionTap(id,fn){const el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();fn(e,el);});}
+  bindActionTap('btn-run',(_,el)=>{touchSprintHeld=!touchSprintHeld;el.classList.toggle('active-hold',touchSprintHeld);});
+  bindActionTap('btn-jump',()=>triggerJump());
+  bindActionTap('btn-attack',()=>attack());
+  bindActionTap('btn-interact',()=>interactAction());
+  bindActionTap('btn-collect',()=>collect());
+  bindActionTap('btn-eat',()=>eatBerries());
+  bindActionTap('btn-drink',()=>drinkWater());
+  function gameOver(win=false){dead=true;started=false;resetJoystick();touchLayerEl.classList.remove('active');overlayEl.style.display='flex';document.querySelector('.panel').innerHTML=win?'<h2>VOCÊ SOBREVIVEU!</h2><p style="text-align:center">Três dias no mundo hostil. Este é apenas o começo da sua jornada.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">JOGAR NOVAMENTE</button></div>':'<h2>FIM DA JORNADA</h2><p style="text-align:center">Você não conseguiu sobreviver. Reúna recursos e tente novamente.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">TENTAR NOVAMENTE</button></div>';}
   refreshContinueButton();updateCompass();
   const clockEl=document.getElementById('clock');let last=performance.now();let saveTimer=0;
   function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,0.05);last=now;if(started&&!dead){elapsed+=dt;saveTimer+=dt;food=Math.max(0,food-dt*0.16);water=Math.max(0,water-dt*0.23);if(food===0||water===0)hp-=dt*0.9;const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));const move=new THREE.Vector3();if(keys.KeyW||keys.ArrowUp)move.add(forward);if(keys.KeyS||keys.ArrowDown)move.sub(forward);if(keys.KeyD||keys.ArrowRight)move.add(right);if(keys.KeyA||keys.ArrowLeft)move.sub(right);if(Math.hypot(joyVec.x,joyVec.y)>0.08){move.addScaledVector(forward,-joyVec.y);move.addScaledVector(right,joyVec.x);}if(move.lengthSq()>0.0001){const sprinting=!!(keys.ShiftLeft||keys.ShiftRight||touchSprintHeld);const speed=sprinting?8:4.5;move.normalize().multiplyScalar(speed*dt);player.position.x=Math.max(-105,Math.min(105,player.position.x+move.x));player.position.z=Math.max(-105,Math.min(105,player.position.z+move.z));player.rotation.y=Math.atan2(-move.x,-move.z);}if(keys.Space&&!lastJump)triggerJump();lastJump=!!keys.Space;if(!isGrounded||velY>0){velY-=18*dt;player.position.y+=velY*dt;if(player.position.y<=0){player.position.y=0;velY=0;isGrounded=true;}}if(keys.KeyE&&!lastCollect)collect();lastCollect=!!keys.KeyE;if((keys.Enter||keys.NumpadEnter)&&!lastAttack)attack();lastAttack=!!(keys.Enter||keys.NumpadEnter);if(keys.KeyF){keys.KeyF=false;eatBerries();}if(keys.KeyR){keys.KeyR=false;drinkWater();}for(const z of zombies){const dir=new THREE.Vector3().subVectors(player.position,z.obj.position);dir.y=0;const d=dir.length();if(d>1.35){dir.normalize();z.obj.position.add(dir.multiplyScalar(dt*(elapsed%120>70?1.7:0.85)));z.obj.rotation.y=Math.atan2(-dir.x,-dir.z);}else{z.hit+=dt;if(z.hit>1.1){hp-=7;z.hit=0;}}}const t=(elapsed%150)/150;const night=t>0.67;sun.intensity=night?0.25:2.2;scene.background.set(night?0x111b31:0x91b9c2);scene.fog.color.set(night?0x111b31:0x91b9c2);scene.fog.near=night?15:35;scene.fog.far=night?65:115;day=Math.floor(elapsed/150)+1;const hh=Math.floor((8+(elapsed%150)/150*24)%24);clockEl.textContent=`DIA ${day} · ${String(hh).padStart(2,'0')}:00${night?' · NOITE':''}`;if(saveTimer>=10){saveTimer=0;saveGameState();}if(elapsed>450)gameOver(true);if(hp<=0)gameOver(false);updateHud();updateCompass();}const target=new THREE.Vector3(player.position.x,player.position.y+1,player.position.z);const activeDist=charPreviewMode?3.6:camDist;const activeHeight=charPreviewMode?1.4:(3+pitch*5);const offset=new THREE.Vector3(Math.sin(yaw)*activeDist,activeHeight,Math.cos(yaw)*activeDist);camera.position.lerp(target.clone().add(offset),0.12);camera.lookAt(target);renderer.render(scene,camera);}
@@ -251,7 +254,7 @@ try{
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
   const box=document.getElementById('debugGame');if(box)box.style.display='none';
 }catch(error){reportGameError(error.stack||error.message||String(error));}
-setTimeout(()=>{const box=document.getElementById('debugGame');if(box&&box.textContent.includes('carregando')){box.style.display='block';box.innerHTML=document.querySelector('canvas')?'MOTOR 3D CARREGADO. Verificando renderização...':'ERRO: O motor 3D não criou o canvas.';}},6000);
+setTimeout(()=>{const box=document.getElementById('debugGame');if(box&&box.textContent.includes('carregando')){box.style.display='none';}},6000);
 </script>
 </body>
 </html>
