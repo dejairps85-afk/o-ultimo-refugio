@@ -55,6 +55,12 @@ var unlocked_items: Array[String] = ["character_survivor", "outfit_field", "acce
 var equipped_items := {"character": "character_survivor", "outfit": "outfit_field", "accessory": "accessory_none", "weapon": "weapon_fists", "vehicle": "vehicle_none"}
 var shop_category := "personagens"
 var weapon_damage := 50.0
+var rifle_ammo := 30
+var rifle_reserve := 120
+var rifle_reload_timer := 0.0
+var rifle_reloading := false
+var ammo_label: Label
+
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
 var vehicle: CharacterBody3D
@@ -1864,67 +1870,139 @@ func _update_infected(delta: float) -> void:
 	if player_attack_cooldown > 0.0:
 		player_attack_cooldown -= delta
 	if attack_requested and player_attack_cooldown <= 0.0:
-		player_attack_cooldown = 0.65
-		player_attack_anim_time = 0.48
-		_play_best_animation(player_animation, ["attack", "punch", "hit"])
-		for enemy_data in enemies:
-			if not enemy_data["alive"]:
-				continue
-			var infected: CharacterBody3D = enemy_data["node"]
-			var attack_offset := infected.global_position - player.global_position
-			var attack_distance := Vector2(attack_offset.x, attack_offset.z).length()
-			var forward := -player.global_transform.basis.z
-			var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
-			if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
-				enemy_data["health"] = float(enemy_data["health"]) - weapon_damage
-				enemy_data["stagger_timer"] = 0.20
-				enemy_data["knockback"] = target_direction * 6.5
-				_trigger_camera_shake(0.035)
-				_attack_feedback_time = 0.55
-				status_label.text = "ACERTO!  -%d HP" % int(weapon_damage)
-				if float(enemy_data["health"]) <= 0.0:
-					enemy_data["alive"] = false
-					_award_infected_kill()
-					infected.queue_free()
+			player_attack_cooldown = 0.65
+			if equipped_items.get("weapon", "") == "weapon_rifle":
+				_fire_rifle()
+			else:
+			player_attack_anim_time = 0.48
+			_play_best_animation(player_animation, ["attack", "punch", "hit"])
+			for enemy_data in enemies:
+				if not enemy_data["alive"]:
+					continue
+				var infected: CharacterBody3D = enemy_data["node"]
+				var attack_offset := infected.global_position - player.global_position
+				var attack_distance := Vector2(attack_offset.x, attack_offset.z).length()
+				var forward := -player.global_transform.basis.z
+				var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
+				if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
+					enemy_data["health"] = float(enemy_data["health"]) - weapon_damage
+					enemy_data["stagger_timer"] = 0.20
+					enemy_data["knockback"] = target_direction * 6.5
+					_trigger_camera_shake(0.035)
+					_attack_feedback_time = 0.55
+					status_label.text = "ACERTO!  -%d HP" % int(weapon_damage)
+					if float(enemy_data["health"]) <= 0.0:
+						enemy_data["alive"] = false
+						_award_infected_kill()
+						infected.queue_free()
+			for hostile in hostile_humans:
+				if not bool(hostile["alive"]):
+					continue
+				var npc := hostile["node"] as CharacterBody3D
+				if not is_instance_valid(npc):
+					continue
+				var human_offset := npc.global_position - player.global_position
+				var human_distance := Vector2(human_offset.x, human_offset.z).length()
+				var human_direction := Vector3(human_offset.x, 0.0, human_offset.z).normalized()
+				if human_distance < 3.4 and forward.dot(human_direction) > 0.15:
+					hostile["health"] = float(hostile["health"]) - weapon_damage
+					hostile["stagger_timer"] = 0.22
+					hostile["knockback"] = human_direction * 7.0
+					_trigger_camera_shake(0.04)
+					status_label.text = "ACERTO NO COMBATENTE  •  %s" % str(hostile["faction"])
+					if float(hostile["health"]) <= 0.0:
+						hostile["alive"] = false
+						credits += 25
+						_save_profile()
+						npc.queue_free()
+						status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS"
+			for wildlife_index in range(wildlife.size() - 1, -1, -1):
+				var animal_data: Dictionary = wildlife[wildlife_index]
+				var animal := animal_data["node"] as Node3D
+				if not is_instance_valid(animal):
+					continue
+				var animal_offset := animal.global_position - player.global_position
+				var animal_distance := Vector2(animal_offset.x, animal_offset.z).length()
+				var animal_direction := Vector3(animal_offset.x, 0.0, animal_offset.z).normalized()
+				if animal_distance < 3.0 and forward.dot(animal_direction) > 0.0:
+					var hunted_kind := str(animal_data["kind"])
+					var meat_amount := 3 if hunted_kind == "JAVALI" else 2 if hunted_kind == "CERVO" else 1
+					food += meat_amount
+					animal.queue_free()
+					wildlife.remove_at(wildlife_index)
+					_save_profile()
+					status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
+
+func _trigger_camera_shake(strength: float) -> void:func _fire_rifle() -> void:
+	if rifle_reloading:
+		status_label.text = "RECARREGANDO..."
+		return
+	if rifle_ammo <= 0:
+		status_label.text = "SEM MUNIÇÃO — RECARREGUE"
+		return
+	rifle_ammo -= 1
+	var origin := player.global_position + Vector3(0.0, 1.35, 0.0)
+	var forward := -player.global_transform.basis.z
+	var target_point := origin + forward * 55.0
+	var query := PhysicsRayQueryParameters3D.create(origin, target_point)
+	query.exclude = [player.get_rid()]
+	query.collision_mask = 1
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit_position: Vector3 = hit.get("position", target_point)
+	_spawn_bullet_trace(origin, hit_position)
+	var collider: Object = hit.get("collider")
+	var hit_target := false
+	for enemy_data in enemies:
+		if not bool(enemy_data["alive"]):
+			continue
+		var infected := enemy_data["node"] as CharacterBody3D
+		if is_instance_valid(infected) and collider == infected:
+			enemy_data["health"] = float(enemy_data["health"]) - 42.0
+			enemy_data["stagger_timer"] = 0.35
+			enemy_data["knockback"] = forward * 3.5
+			hit_target = true
+			if float(enemy_data["health"]) <= 0.0:
+				enemy_data["alive"] = false
+				_award_infected_kill()
+				infected.queue_free()
+			break
+	if not hit_target:
 		for hostile in hostile_humans:
 			if not bool(hostile["alive"]):
 				continue
 			var npc := hostile["node"] as CharacterBody3D
-			if not is_instance_valid(npc):
-				continue
-			var human_offset := npc.global_position - player.global_position
-			var human_distance := Vector2(human_offset.x, human_offset.z).length()
-			var human_direction := Vector3(human_offset.x, 0.0, human_offset.z).normalized()
-			if human_distance < 3.4 and forward.dot(human_direction) > 0.15:
-				hostile["health"] = float(hostile["health"]) - weapon_damage
-				hostile["stagger_timer"] = 0.22
-				hostile["knockback"] = human_direction * 7.0
-				_trigger_camera_shake(0.04)
-				status_label.text = "ACERTO NO COMBATENTE  •  %s" % str(hostile["faction"])
+			if is_instance_valid(npc) and collider == npc:
+				hostile["health"] = float(hostile["health"]) - 42.0
+				hostile["stagger_timer"] = 0.35
+				hostile["knockback"] = forward * 3.5
+				hit_target = true
 				if float(hostile["health"]) <= 0.0:
 					hostile["alive"] = false
 					credits += 25
 					_save_profile()
 					npc.queue_free()
 					status_label.text = "AMEAÇA ELIMINADA  •  +25 CRÉDITOS"
-		for wildlife_index in range(wildlife.size() - 1, -1, -1):
-			var animal_data: Dictionary = wildlife[wildlife_index]
-			var animal := animal_data["node"] as Node3D
-			if not is_instance_valid(animal):
-				continue
-			var animal_offset := animal.global_position - player.global_position
-			var animal_distance := Vector2(animal_offset.x, animal_offset.z).length()
-			var animal_direction := Vector3(animal_offset.x, 0.0, animal_offset.z).normalized()
-			if animal_distance < 3.0 and forward.dot(animal_direction) > 0.0:
-				var hunted_kind := str(animal_data["kind"])
-				var meat_amount := 3 if hunted_kind == "JAVALI" else 2 if hunted_kind == "CERVO" else 1
-				food += meat_amount
-				animal.queue_free()
-				wildlife.remove_at(wildlife_index)
-				_save_profile()
-				status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
+				break
+	if not hit_target:
+		status_label.text = "DISPARO — ALVO NÃO ATINGIDO"
+	else:
+		status_label.text = "DISPARO CONFIRMADO  •  -42 HP"
+		_trigger_camera_shake(0.025)
+	if is_instance_valid(ammo_label):
+		ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
+	_save_profile()
 
-func _trigger_camera_shake(strength: float) -> void:
+func _reload_rifle() -> void:
+	if equipped_items.get("weapon", "") != "weapon_rifle":
+		status_label.text = "EQUIPE O RIFLE NA LOJA"
+		return
+	if rifle_reloading or rifle_ammo >= 30 or rifle_reserve <= 0:
+		return
+	rifle_reloading = true
+	rifle_reload_timer = 1.65
+	status_label.text = "RECARREGANDO..."
+
+
 	camera_shake_timer = 0.18
 	camera_shake_strength = maxf(camera_shake_strength, strength)
 
@@ -2158,6 +2236,18 @@ func _build_hud() -> void:
 	resource_label.add_theme_font_size_override("font_size", 14)
 	resource_label.add_theme_color_override("font_color", Color(0.78, 0.86, 0.68))
 	layer.add_child(resource_label)
+	ammo_label = Label.new()
+	ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
+	ammo_label.position = Vector2(22, 216)
+	ammo_label.add_theme_font_size_override("font_size", 14)
+	ammo_label.add_theme_color_override("font_color", Color(0.92, 0.78, 0.48))
+	layer.add_child(ammo_label)
+	var reload_button := Button.new()
+	reload_button.text = "RECARREGAR"
+	reload_button.custom_minimum_size = Vector2(132, 42)
+	reload_button.position = Vector2(22, 396)
+	reload_button.pressed.connect(_reload_rifle)
+	layer.add_child(reload_button)
 	var collect_button := Button.new()
 	collect_button.text = "COLETAR"
 	collect_button.custom_minimum_size = Vector2(120, 44)
@@ -2234,6 +2324,8 @@ func _load_profile() -> void:
 		scrap = int(config.get_value("profile", "scrap", 0))
 		food = int(config.get_value("profile", "food", 0))
 		medical_supplies = int(config.get_value("profile", "medical_supplies", 0))
+		rifle_ammo = int(config.get_value("profile", "rifle_ammo", 30))
+		rifle_reserve = int(config.get_value("profile", "rifle_reserve", 120))
 		shelter_level = int(config.get_value("profile", "shelter_level", 0))
 		looted_poi_ids = config.get_value("profile", "looted_poi_ids", looted_poi_ids)
 
@@ -2248,6 +2340,8 @@ func _save_profile() -> void:
 	config.set_value("profile", "scrap", scrap)
 	config.set_value("profile", "food", food)
 	config.set_value("profile", "medical_supplies", medical_supplies)
+	config.set_value("profile", "rifle_ammo", rifle_ammo)
+	config.set_value("profile", "rifle_reserve", rifle_reserve)
 	config.set_value("profile", "shelter_level", shelter_level)
 	config.set_value("profile", "looted_poi_ids", looted_poi_ids)
 	config.save("user://survivor_profile.cfg")
@@ -2271,6 +2365,7 @@ func _shop_catalog() -> Array[Dictionary]:
 		{"id":"weapon_fists","category":"armas","name":"Combate corpo a corpo","description":"Dano básico: 50","price":0,"kind":"weapon","damage":50.0},
 		{"id":"weapon_knife","category":"armas","name":"Faca de sobrevivência","description":"Dano corpo a corpo: 75","price":250,"kind":"weapon","damage":75.0},
 		{"id":"weapon_axe","category":"armas","name":"Machado tático","description":"Dano corpo a corpo: 110","price":500,"kind":"weapon","damage":110.0},
+		{"id":"weapon_rifle","category":"armas","name":"Rifle de patrulha","description":"Arma de longo alcance; carregador 30, reserva 120","price":1400,"kind":"weapon","damage":42.0},
 		{"id":"vehicle_none","category":"veículos","name":"A pé","description":"Deslocamento padrão","price":0,"kind":"vehicle"},
 		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Veículo leve para exploração e transporte","price":900,"kind":"vehicle"},
 		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Veículo rápido para trilhas","price":1200,"kind":"vehicle"},
@@ -2824,6 +2919,20 @@ func _physics_process(delta: float) -> void:
 	_update_camera_feedback(delta)
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
+	if rifle_reloading:
+		rifle_reload_timer = maxf(0.0, rifle_reload_timer - delta)
+		if rifle_reload_timer <= 0.0:
+			var needed := 30 - rifle_ammo
+			var loaded := mini(needed, rifle_reserve)
+			rifle_ammo += loaded
+			rifle_reserve -= loaded
+			rifle_reloading = false
+			if is_instance_valid(ammo_label):
+				ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
+			_save_profile()
+			if is_instance_valid(status_label):
+				status_label.text = "RIFLE RECARREGADO"
+
 	if fishing_cooldown > 0.0:
 		fishing_cooldown = maxf(0.0, fishing_cooldown - delta)
 	if dodge_cooldown > 0.0:
