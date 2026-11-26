@@ -3022,7 +3022,7 @@ func _toggle_sprint() -> void:
 	if is_instance_valid(sprint_button):
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
-	func _physics_process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
 	movement_noise_timer = maxf(0.0, movement_noise_timer - delta)
 	footstep_noise_cooldown = maxf(0.0, footstep_noise_cooldown - delta)
