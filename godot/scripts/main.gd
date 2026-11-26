@@ -58,6 +58,10 @@ var collect_requested := false
 var collect_cooldown := 0.0
 var built_structures: Array[Dictionary] = []
 var allied_survivors: Array[Dictionary] = []
+var shelter_level := 0
+var shelter_root: Node3D
+var shelter_heal_timer := 0.0
+var shelter_label: Label
 
 func _ready() -> void:
 	rng.randomize()
@@ -314,6 +318,93 @@ func _collect_nearby_resource() -> void:
 	_save_profile()
 	status_label.text = "RECURSO COLETADO: %s +%d" % [str(found["kind"]).to_upper(), amount]
 
+func _upgrade_shelter() -> void:
+	if shelter_level >= 3:
+		status_label.text = "REFÚGIO NO NÍVEL MÁXIMO"
+		return
+	var costs := [{"wood": 20, "scrap": 8, "food": 4}, {"wood": 28, "scrap": 15, "food": 8}, {"wood": 40, "scrap": 24, "food": 12}]
+	var cost: Dictionary = costs[shelter_level]
+	if wood < int(cost["wood"]) or scrap < int(cost["scrap"]) or food < int(cost["food"]):
+		status_label.text = "MATERIAIS INSUFICIENTES PARA A MELHORIA"
+		return
+	wood -= int(cost["wood"])
+	scrap -= int(cost["scrap"])
+	food -= int(cost["food"])
+	shelter_level += 1
+	_build_shelter_visual()
+	_save_profile()
+	_save_buildings()
+	_update_shelter_hud()
+	status_label.text = "REFÚGIO APRIMORADO PARA O NÍVEL %d" % shelter_level
+
+func _build_shelter_visual() -> void:
+	if is_instance_valid(shelter_root):
+		shelter_root.queue_free()
+	shelter_root = Node3D.new()
+	shelter_root.name = "SurvivorShelter_Level_%d" % shelter_level
+	shelter_root.position = Vector3(0, _height_at(0, -8), -8)
+	add_child(shelter_root)
+	var post_material := _make_material(Color(0.22, 0.15, 0.09))
+	var canvas_material := _make_material(Color(0.34, 0.39, 0.29))
+	for x in [-2.2, 2.2]:
+		for z in [-1.8, 1.8]:
+			var post := MeshInstance3D.new()
+			var post_mesh := BoxMesh.new()
+			post_mesh.size = Vector3(0.18, 2.6, 0.18)
+			post.mesh = post_mesh
+			post.position = Vector3(x, 1.3, z)
+			post.material_override = post_material
+			shelter_root.add_child(post)
+	var roof := MeshInstance3D.new()
+	var roof_mesh := BoxMesh.new()
+	roof_mesh.size = Vector3(5.0, 0.18, 4.4)
+	roof.mesh = roof_mesh
+	roof.position.y = 2.65
+	roof.material_override = canvas_material
+	shelter_root.add_child(roof)
+	if shelter_level >= 2:
+		for z in [-2.0, 2.0]:
+			var wall := MeshInstance3D.new()
+			var wall_mesh := BoxMesh.new()
+			wall_mesh.size = Vector3(4.3, 1.45, 0.12)
+			wall.mesh = wall_mesh
+			wall.position = Vector3(0, 0.75, z)
+			wall.material_override = _make_material(Color(0.25, 0.28, 0.21))
+			shelter_root.add_child(wall)
+	if shelter_level >= 3:
+		var beacon := OmniLight3D.new()
+		beacon.position = Vector3(0, 3.2, 0)
+		beacon.light_color = Color(1.0, 0.68, 0.32)
+		beacon.light_energy = 1.8
+		beacon.omni_range = 13.0
+		shelter_root.add_child(beacon)
+		var mast := MeshInstance3D.new()
+		var mast_mesh := CylinderMesh.new()
+		mast_mesh.top_radius = 0.07
+		mast_mesh.bottom_radius = 0.10
+		mast_mesh.height = 3.4
+		mast.mesh = mast_mesh
+		mast.position = Vector3(0, 4.2, -1.6)
+		mast.material_override = post_material
+		shelter_root.add_child(mast)
+
+func _update_shelter_hud() -> void:
+	if is_instance_valid(shelter_label):
+		var names := ["ACAMPAMENTO", "ABRIGO BÁSICO", "ABRIGO REFORÇADO", "REFÚGIO FORTIFICADO"]
+		shelter_label.text = "%s  •  NÍVEL %d/3" % [names[shelter_level], shelter_level]
+
+func _update_shelter_support(delta: float) -> void:
+	if shelter_level <= 0 or not is_instance_valid(shelter_root) or not is_instance_valid(player):
+		return
+	if player.global_position.distance_to(shelter_root.global_position) > 9.0:
+		return
+	shelter_heal_timer = maxf(0.0, shelter_heal_timer - delta)
+	if shelter_heal_timer <= 0.0 and player_health < 100.0 and food > 0:
+		food -= 1
+		player_health = minf(100.0, player_health + 5.0 + float(shelter_level) * 2.0)
+		shelter_heal_timer = maxf(18.0 - float(shelter_level) * 3.0, 8.0)
+		_save_profile()
+
 func _build_barricade() -> void:
 	if wood < 8 or scrap < 5:
 		status_label.text = "PRECISA DE 8 MADEIRAS E 5 SUCATAS"
@@ -349,6 +440,7 @@ func _build_barricade() -> void:
 func _save_buildings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("world", "barricades", built_structures)
+	config.set_value("world", "shelter_level", shelter_level)
 	config.save("user://survivor_world.cfg")
 
 func _load_saved_buildings() -> void:
@@ -356,6 +448,9 @@ func _load_saved_buildings() -> void:
 	if config.load("user://survivor_world.cfg") != OK:
 		return
 	built_structures = config.get_value("world", "barricades", [])
+	shelter_level = int(config.get_value("world", "shelter_level", shelter_level))
+	if shelter_level > 0:
+		_build_shelter_visual()
 	for data in built_structures:
 		var barricade := StaticBody3D.new()
 		barricade.name = "SavedBarricade"
@@ -805,6 +900,18 @@ func _build_hud() -> void:
 	build_button.position = Vector2(22, 344)
 	build_button.pressed.connect(_build_barricade)
 	layer.add_child(build_button)
+	var shelter_button := Button.new()
+	shelter_button.text = "MELHORAR REFÚGIO"
+	shelter_button.custom_minimum_size = Vector2(190, 44)
+	shelter_button.position = Vector2(222, 344)
+	shelter_button.pressed.connect(_upgrade_shelter)
+	layer.add_child(shelter_button)
+	shelter_label = Label.new()
+	shelter_label.position = Vector2(222, 394)
+	shelter_label.add_theme_font_size_override("font_size", 14)
+	shelter_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
+	layer.add_child(shelter_label)
+	_update_shelter_hud()
 	vehicle_toggle_button = Button.new()
 	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
 	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
@@ -844,6 +951,7 @@ func _load_profile() -> void:
 		wood = int(config.get_value("profile", "wood", 0))
 		scrap = int(config.get_value("profile", "scrap", 0))
 		food = int(config.get_value("profile", "food", 0))
+		shelter_level = int(config.get_value("profile", "shelter_level", 0))
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
@@ -855,6 +963,7 @@ func _save_profile() -> void:
 	config.set_value("profile", "wood", wood)
 	config.set_value("profile", "scrap", scrap)
 	config.set_value("profile", "food", food)
+	config.set_value("profile", "shelter_level", shelter_level)
 	config.save("user://survivor_profile.cfg")
 	if wallet_label:
 		wallet_label.text = "CRÉDITOS: %d" % credits
@@ -1304,6 +1413,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_update_wave_director(delta)
 	_update_allied_survivors(delta)
+	_update_shelter_support(delta)
 	if vehicle_active:
 		_update_vehicle(delta)
 		_update_infected(delta)
