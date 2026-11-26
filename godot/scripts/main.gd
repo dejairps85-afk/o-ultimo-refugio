@@ -57,6 +57,7 @@ var resource_nodes: Array[Dictionary] = []
 var collect_requested := false
 var collect_cooldown := 0.0
 var built_structures: Array[Dictionary] = []
+var allied_survivors: Array[Dictionary] = []
 
 func _ready() -> void:
 	rng.randomize()
@@ -65,6 +66,7 @@ func _ready() -> void:
 	_scatter_environment()
 	_build_player()
 	_spawn_infected()
+	_spawn_allied_survivors()
 	_load_profile()
 	_load_saved_buildings()
 	_apply_player_customization()
@@ -1165,6 +1167,95 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_pivot.rotation.y -= event.relative.x * 0.004
 			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
 
+
+func _spawn_allied_survivors() -> void:
+	# Companheiros locais: IA leve, sem chamadas externas, preparada para evoluir.
+	var ally_specs := [
+		{"name": "MAYA • MÉDICA", "role": "MÉDICA", "color": Color(0.72, 0.28, 0.22), "offset": Vector3(2.8, 0, 2.2)},
+		{"name": "RAUL • PATRULHEIRO", "role": "PATRULHEIRO", "color": Color(0.22, 0.38, 0.25), "offset": Vector3(-2.8, 0, 2.2)}
+	]
+	for spec in ally_specs:
+		var ally := CharacterBody3D.new()
+		ally.name = str(spec["name"]).replace(" ", "_")
+		ally.position = Vector3(spec["offset"].x, _height_at(spec["offset"].x, spec["offset"].z), spec["offset"].z)
+		ally.floor_snap_length = 0.35
+		var collision := CollisionShape3D.new()
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = 0.34
+		capsule.height = 1.72
+		collision.shape = capsule
+		collision.position.y = 0.86
+		ally.add_child(collision)
+		var body_mesh := MeshInstance3D.new()
+		var body_shape := CapsuleMesh.new()
+		body_shape.radius = 0.34
+		body_shape.height = 1.72
+		body_mesh.mesh = body_shape
+		body_mesh.position.y = 0.86
+		body_mesh.material_override = _make_material(spec["color"], 0.82)
+		ally.add_child(body_mesh)
+		var head := MeshInstance3D.new()
+		var head_shape := SphereMesh.new()
+		head_shape.radius = 0.19
+		head_shape.height = 0.38
+		head.mesh = head_shape
+		head.position.y = 1.78
+		head.material_override = _make_material(Color(0.66, 0.48, 0.36))
+		ally.add_child(head)
+		var role_label := Label3D.new()
+		role_label.text = str(spec["role"])
+		role_label.position.y = 2.15
+		role_label.font_size = 30
+		role_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		role_label.modulate = Color(0.88, 0.94, 0.82)
+		ally.add_child(role_label)
+		add_child(ally)
+		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW"})
+
+func _update_allied_survivors(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	for index in range(allied_survivors.size()):
+		var data: Dictionary = allied_survivors[index]
+		var ally := data["body"] as CharacterBody3D
+		if not is_instance_valid(ally):
+			continue
+		var offset: Vector3 = data["home_offset"]
+		var desired := player.global_position + player.global_transform.basis * offset
+		var distance := Vector2(ally.global_position.x - player.global_position.x, ally.global_position.z - player.global_position.z).length()
+		var target := desired
+		var nearest_enemy: Node3D = null
+		var nearest_distance := 999.0
+		for enemy_data in enemies:
+			var enemy := enemy_data.get("body") as Node3D
+			if is_instance_valid(enemy):
+				var enemy_distance := ally.global_position.distance_to(enemy.global_position)
+				if enemy_distance < nearest_distance:
+					nearest_distance = enemy_distance
+					nearest_enemy = enemy
+		# Patrulheiros avançam para interceptar ameaças próximas; médicos mantêm posição junto ao grupo.
+		if str(data["role"]) == "PATRULHEIRO" and nearest_enemy and nearest_distance < 8.0:
+			target = nearest_enemy.global_position - (nearest_enemy.global_position - ally.global_position).normalized() * 2.2
+			data["state"] = "DEFEND"
+		else:
+			data["state"] = "FOLLOW"
+		if distance > 2.4:
+			var move_dir := Vector3(target.x - ally.global_position.x, 0, target.z - ally.global_position.z).normalized()
+			move_dir = _steer_around_obstacles(ally.global_position, ally.global_position + move_dir * 3.0)
+			ally.velocity.x = move_dir.x * 4.2
+			ally.velocity.z = move_dir.z * 4.2
+			if move_dir.length() > 0.1:
+				ally.rotation.y = lerp_angle(ally.rotation.y, atan2(-move_dir.x, -move_dir.z), delta * 5.0)
+		else:
+			ally.velocity.x = move_toward(ally.velocity.x, 0.0, 16.0 * delta)
+			ally.velocity.z = move_toward(ally.velocity.z, 0.0, 16.0 * delta)
+		if not ally.is_on_floor():
+			ally.velocity.y -= 19.0 * delta
+		else:
+			ally.velocity.y = 0.0
+		ally.move_and_slide()
+		allied_survivors[index] = data
+
 func _trigger_game_over() -> void:
 	if game_over:
 		return
@@ -1179,6 +1270,7 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player) or game_over:
 		return
 	_update_wave_director(delta)
+	_update_allied_survivors(delta)
 	if vehicle_active:
 		_update_vehicle(delta)
 		_update_infected(delta)
