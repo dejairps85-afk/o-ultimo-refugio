@@ -1833,12 +1833,23 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 			return found
 	return null
 
+func _relative_transform_to_root(root: Node3D, node: Node3D) -> Transform3D:
+	# Usa transformações locais: os modelos ainda podem estar sendo montados
+	# antes de o personagem entrar na árvore ativa da cena.
+	var relative := Transform3D.IDENTITY
+	var current: Node = node
+	while current != null and current != root:
+		if current is Node3D:
+			relative = (current as Node3D).transform * relative
+		current = current.get_parent()
+	return relative
+
 func _fit_model_height(root: Node3D, target_height: float) -> void:
 	var bounds := AABB()
 	var found := false
 	for mesh_node in root.find_children("*", "MeshInstance3D", true, false):
-		var relative_transform: Transform3D = root.global_transform.affine_inverse() * mesh_node.global_transform
-		var mesh_bounds: AABB = relative_transform * mesh_node.get_aabb()
+		var relative_transform := _relative_transform_to_root(root, mesh_node as Node3D)
+		var mesh_bounds: AABB = relative_transform * (mesh_node as MeshInstance3D).get_aabb()
 		if not found:
 			bounds = mesh_bounds
 			found = true
@@ -2774,7 +2785,7 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	status_label = Label.new()
-	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS %d  |  HOSTIS %d" % [_alive_enemy_count(), _alive_hostile_count()]
+	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%%  |  INFECTADOS %d  |  HOSTIS %d" % [_alive_enemy_count(), _alive_hostile_count()]
 	status_label.position = Vector2(22, 18)
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
