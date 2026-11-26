@@ -1,0 +1,77 @@
+name: Importar infectados 3D rigados e animados
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/evolucao-mundo-3d
+    paths:
+      - .github/workflows/importar-infectados-3d.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-infected:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da branch de desenvolvimento
+        uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Baixar e otimizar modelos GLB licenciados
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p assets/models/infected
+          curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-walker.glb -o /tmp/zombie-walker.glb
+          curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-runner.glb -o /tmp/zombie-runner.glb
+          curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-brute.glb -o /tmp/zombie-brute.glb
+          npm install --global @gltf-transform/cli
+          for model in zombie-walker zombie-runner zombie-brute; do
+            gltf-transform optimize "/tmp/${model}.glb" "assets/models/infected/${model}.glb"
+            test -s "assets/models/infected/${model}.glb"
+            size=$(stat -c%s "assets/models/infected/${model}.glb")
+            echo "${model}: ${size} bytes"
+            if [ "$size" -gt 7000000 ]; then echo "Modelo excede 7 MB: ${model}"; exit 1; fi
+          done
+
+      - name: Registrar créditos e licenças
+        run: |
+          cat > assets/models/infected/ASSET-CREDITS.txt <<'EOF'
+          Modelos de infectados usados em O Último Refúgio
+          
+          Zombie Walker
+          Autor: vinish.dev
+          Fonte: https://vinish.dev/free-3d-models/zombies
+          Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          
+          Zombie Runner
+          Autor: vinish.dev
+          Fonte: https://vinish.dev/free-3d-models/zombies
+          Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          
+          Zombie Brute
+          Autor: vinish.dev
+          Fonte: https://vinish.dev/free-3d-models/zombies
+          Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          
+          Os modelos foram otimizados com gltf-transform para distribuição web.
+          Créditos obrigatórios mantidos conforme CC BY 4.0.
+          EOF
+
+      - name: Commit dos modelos na branch de desenvolvimento
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/infected
+          if git diff --cached --quiet; then echo "Nenhum modelo novo."; exit 0; fi
+          git commit -m "Adicionar infectados 3D rigados com animações"
+          git push origin HEAD:feature/evolucao-mundo-3d
