@@ -234,6 +234,9 @@ window.addEventListener('unhandledrejection',e=>reportGameError(String(e.reason)
     <div class="menu-list"><button class="menu-btn secondary" id="btn-back-from-ctrl" type="button">VOLTAR AO MENU</button></div>
   </div>
 </div></div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"}}
+</script>
 <script type="module">
 const STORAGE_KEYS={PROFILE:'ultimo_refugio_profile_v1',SETTINGS:'ultimo_refugio_settings_v1',SAVE:'ultimo_refugio_save_v1'};
 const OUTFIT_COLORS=['#344d68','#7d3b32','#3c6e47','#8a6528','#524373','#2e6f73'];
@@ -248,6 +251,7 @@ let audioCtx=null;
 function playCue(freq=320,duration=0.08,type='triangle'){const vol=Math.max(0,Math.min(1,Number(settings.volume??80)/100));if(vol<=0)return;try{if(!audioCtx){const Ctx=window.AudioContext||window.webkitAudioContext;if(Ctx)audioCtx=new Ctx();}if(!audioCtx)return;if(audioCtx.state==='suspended')audioCtx.resume();const osc=audioCtx.createOscillator();const gain=audioCtx.createGain();osc.type=type;osc.frequency.value=freq;gain.gain.value=0.06*vol;osc.connect(gain);gain.connect(audioCtx.destination);osc.start();osc.stop(audioCtx.currentTime+duration);}catch(_){}}
 try{
   const THREE=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+  const {GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
   /* CINEMATIC RENDER PASS 1.0 */
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x182a2b);scene.fog=new THREE.Fog(0x71827a,24,102);
   const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,420);
@@ -318,12 +322,43 @@ try{
   barkMats.forEach(m=>{m.map=barkTexture;m.bumpMap=barkBump;m.bumpScale=.12;m.roughness=.96;});leafMats.forEach(m=>{m.map=leafTexture;m.bumpMap=leafTexture;m.bumpScale=.035;m.roughness=.92;});bushMats.forEach(m=>{m.map=leafTexture;m.roughness=.94;});
   const trunkGeo=new THREE.CylinderGeometry(.18,.3,1,7),pineGeo=new THREE.ConeGeometry(1,1,7),crownGeo=new THREE.IcosahedronGeometry(1,0),rockGeo=new THREE.DodecahedronGeometry(1,0),bushGeo=new THREE.IcosahedronGeometry(1,0),grassGeo=new THREE.ConeGeometry(.075,1,4);
   const grassBatches=leafMats.map(()=>[]),grassDummy=new THREE.Object3D();
-  function tree(x,z){const g=new THREE.Group(),scale=rand(.82,1.3),type=Math.random(),trunkHeight=rand(2.8,3.8);const trunk=new THREE.Mesh(trunkGeo,barkMats[Math.floor(Math.random()*barkMats.length)]);trunk.scale.set(scale,trunkHeight,scale);trunk.position.y=trunkHeight/2;g.add(trunk);if(type<.72){const layers=2+Math.floor(Math.random()*2);for(let k=0;k<layers;k++){const h=rand(2,2.8)*scale,r=rand(1.05,1.5)*scale;const crown=new THREE.Mesh(pineGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);crown.scale.set(r,h,r);crown.position.y=(1.55+k*.78)*scale;crown.rotation.y=rand(0,Math.PI);g.add(crown);}}else{for(let k=0;k<3;k++){const crown=new THREE.Mesh(crownGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);const r=rand(.72,1.05)*scale;crown.position.set(rand(-.65,.65)*scale,rand(2.2,3.5)*scale,rand(-.65,.65)*scale);crown.scale.set(r,r*rand(.8,1.25),r);g.add(crown);}}g.position.set(x,terrainHeight(x,z),z);g.traverse(o=>{if(o.isMesh){o.castShadow=!isMobile;o.receiveShadow=!isMobile;}});scene.add(g);resources.push({obj:g,type:'wood',amount:1,rad:1.7});}
+  const treeCandidates=[];
+  function tree(x,z){const g=new THREE.Group(),scale=rand(.82,1.3),type=Math.random(),trunkHeight=rand(2.8,3.8);const trunk=new THREE.Mesh(trunkGeo,barkMats[Math.floor(Math.random()*barkMats.length)]);trunk.scale.set(scale,trunkHeight,scale);trunk.position.y=trunkHeight/2;g.add(trunk);if(type<.72){const layers=2+Math.floor(Math.random()*2);for(let k=0;k<layers;k++){const h=rand(2,2.8)*scale,r=rand(1.05,1.5)*scale;const crown=new THREE.Mesh(pineGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);crown.scale.set(r,h,r);crown.position.y=(1.55+k*.78)*scale;crown.rotation.y=rand(0,Math.PI);g.add(crown);}}else{for(let k=0;k<3;k++){const crown=new THREE.Mesh(crownGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);const r=rand(.72,1.05)*scale;crown.position.set(rand(-.65,.65)*scale,rand(2.2,3.5)*scale,rand(-.65,.65)*scale);crown.scale.set(r,r*rand(.8,1.25),r);g.add(crown);}}g.position.set(x,terrainHeight(x,z),z);g.traverse(o=>{if(o.isMesh){o.castShadow=!isMobile;o.receiveShadow=!isMobile;}});scene.add(g);resources.push({obj:g,type:'wood',amount:1,rad:1.7});treeCandidates.push(g);}
   function rock(x,z){const group=new THREE.Group();for(let i=0,n=1+Math.floor(Math.random()*2);i<n;i++){const m=new THREE.Mesh(rockGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);m.position.set(rand(-.35,.35),rand(.2,.42),rand(-.3,.3));m.scale.set(rand(.42,.78)*rand(.8,1.35),rand(.42,.78)*rand(.55,.9),rand(.42,.78)*rand(.8,1.25));m.rotation.set(rand(-.2,.2),rand(0,6),rand(-.2,.2));group.add(m);}group.position.set(x,terrainHeight(x,z),z);scene.add(group);resources.push({obj:group,type:'stone',amount:1,rad:1.5});}
   function bush(x,z){const group=new THREE.Group();for(let i=0;i<4;i++){const leaf=new THREE.Mesh(bushGeo,bushMats[Math.floor(Math.random()*bushMats.length)]);const r=rand(.28,.48);leaf.position.set(rand(-.48,.48),rand(.2,.55),rand(-.45,.45));leaf.scale.set(r,r*rand(.7,1.1),r);group.add(leaf);}group.position.set(x,terrainHeight(x,z),z);scene.add(group);resources.push({obj:group,type:'berries',amount:2,rad:1.5});}
   function grassTuft(x,z){const y=terrainHeight(x,z);for(let j=0;j<3;j++){const materialIndex=Math.floor(Math.random()*leafMats.length),height=rand(.35,.65);grassDummy.position.set(x+rand(-.18,.18),y+height/2,z+rand(-.18,.18));grassDummy.rotation.set(rand(-.35,.35),rand(0,Math.PI*2),0);grassDummy.scale.set(1,height,1);grassDummy.updateMatrix();grassBatches[materialIndex].push(grassDummy.matrix.clone());}}
   const worldObjectCount=isMobile?76:108,grassTuftCount=isMobile?64:105;
   for(let i=0;i<worldObjectCount;i++){const x=rand(-92,92),z=rand(-92,92);if(Math.hypot(x,z)<10)continue;const q=Math.random();if(q<.61)tree(x,z);else if(q<.81)rock(x,z);else bush(x,z);}
+  function loadRealisticTreeAsset(){
+    const modelUrl=new URL('./assets/models/tree_small_02/tree_small_02_mobile.glb',document.baseURI).href;
+    const loader=new GLTFLoader();
+    loader.load(modelUrl,gltf=>{
+      const source=gltf.scene;
+      const bounds=new THREE.Box3().setFromObject(source);
+      const size=bounds.getSize(new THREE.Vector3());
+      if(!Number.isFinite(size.y)||size.y<0.1){console.warn('Modelo de árvore com dimensões inválidas; mantendo árvores de reserva.');return;}
+      const targetHeight=isMobile?5.1:5.7;
+      const scale=targetHeight/size.y;
+      const center=bounds.getCenter(new THREE.Vector3());
+      const candidates=[...treeCandidates].sort((a,b)=>a.position.length()-b.position.length()).slice(0,isMobile?5:10);
+      for(const group of candidates){
+        group.clear();
+        const instance=source.clone(true);
+        instance.scale.setScalar(scale);
+        instance.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+        instance.rotation.y=rand(0,Math.PI*2);
+        instance.traverse(node=>{
+          if(node.isMesh){node.castShadow=!isMobile;node.receiveShadow=!isMobile;node.frustumCulled=true;}
+        });
+        group.add(instance);
+        group.userData.realisticTree=true;
+      }
+      console.info('Árvores 3D realistas carregadas:',candidates.length);
+    },undefined,error=>{
+      console.warn('Modelo realista indisponível; mantendo árvores procedurais.',error);
+    });
+  }
+  loadRealisticTreeAsset();
   for(let i=0;i<grassTuftCount;i++){const x=rand(-98,98),z=rand(-98,98);if(Math.hypot(x,z)>11)grassTuft(x,z);}
   for(let i=0;i<grassBatches.length;i++){const matrices=grassBatches[i];if(!matrices.length)continue;const batch=new THREE.InstancedMesh(grassGeo,leafMats[i],matrices.length);batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);for(let j=0;j<matrices.length;j++)batch.setMatrixAt(j,matrices[j]);batch.instanceMatrix.needsUpdate=true;batch.frustumCulled=true;batch.castShadow=false;batch.receiveShadow=false;scene.add(batch);}
   const inv={wood:0,stone:0,berries:0};let hp=100,food=100,water=100,elapsed=0,started=false,dead=false,day=1,velY=0,isGrounded=true;
