@@ -101,3 +101,74 @@ jobs:
           if git diff --cached --quiet; then echo "Nenhum modelo novo."; exit 0; fi
           git commit -m "Adicionar conjunto de rochas 3D realistas CC0"
           git push origin HEAD:feature/evolucao-mundo-3d
+
+  import-tree-stump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da branch de desenvolvimento
+        uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Baixar e otimizar Tree Stump 01 CC0
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/polyhaven-stump assets/models/tree_stump_01
+          curl -fsSL -A "O-Ultimo-Refugio/1.0" https://api.polyhaven.com/files/tree_stump_01 -o /tmp/polyhaven-stump.json
+          python3 - <<'PY'
+          import json,pathlib,urllib.request,urllib.parse
+          data=json.loads(pathlib.Path("/tmp/polyhaven-stump.json").read_text())
+          descriptor=data["gltf"]["1k"]["gltf"]
+          base=pathlib.Path("/tmp/polyhaven-stump-model");base.mkdir(exist_ok=True)
+          def download(url,target):
+              target=pathlib.Path(target);target.parent.mkdir(parents=True,exist_ok=True)
+              req=urllib.request.Request(url,headers={"User-Agent":"O-Ultimo-Refugio/1.0"})
+              with urllib.request.urlopen(req,timeout=120) as response,target.open("wb") as out: out.write(response.read())
+          url=descriptor["url"];name=pathlib.Path(urllib.parse.urlparse(url).path).name or "stump.gltf"
+          download(url,base/name)
+          includes=descriptor.get("include",{})
+          entries=includes.items() if isinstance(includes,dict) else enumerate(includes) if isinstance(includes,list) else []
+          for rel,item in entries:
+              if isinstance(item,str): depurl=item;depname=rel or pathlib.Path(urllib.parse.urlparse(depurl).path).name
+              elif isinstance(item,dict): depurl=item.get("url");depname=rel or item.get("file") or item.get("name") or pathlib.Path(urllib.parse.urlparse(depurl or "").path).name
+              else: continue
+              if not depurl: continue
+              safe=pathlib.PurePosixPath(str(depname))
+              if safe.is_absolute() or ".." in safe.parts: raise SystemExit("Dependencia insegura")
+              download(depurl,base.joinpath(*safe.parts))
+          gltf=json.loads((base/name).read_text())
+          for section in ("images","buffers"):
+              for item in gltf.get(section,[]):
+                  uri=item.get("uri")
+                  if uri and not uri.startswith(("data:","http://","https://")) and not (base/pathlib.PurePosixPath(uri)).is_file(): raise SystemExit("Dependencia ausente: "+uri)
+          print("Modelo glTF e dependencias conferidos.")
+          PY
+          npm install --global @gltf-transform/cli
+          INPUT="$(find /tmp/polyhaven-stump-model -maxdepth 1 -name '*.gltf' -print -quit)"
+          gltf-transform simplify "$INPUT" /tmp/tree-stump-simple.glb --ratio 0.3 --error 0.001
+          gltf-transform optimize /tmp/tree-stump-simple.glb assets/models/tree_stump_01/tree_stump_01_mobile.glb
+          SIZE=$(stat -c%s assets/models/tree_stump_01/tree_stump_01_mobile.glb)
+          echo "Tree Stump 01: $SIZE bytes"
+          if [ "$SIZE" -gt 8000000 ]; then echo "Modelo excede 8 MB"; exit 1; fi
+      - name: Registrar creditos e licenca
+        run: |
+          cat > assets/models/tree_stump_01/ASSET-CREDITS.txt <<'EOF'
+          Tree Stump 01
+          Autor: Rob Tuytel
+          Fonte: https://polyhaven.com/a/tree_stump_01
+          Licenca: CC0 1.0 Universal
+          Modelo glTF 1K simplificado e otimizado para web/mobile.
+          EOF
+      - name: Commit do modelo na branch de desenvolvimento
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/tree_stump_01
+          if git diff --cached --quiet; then echo "Nenhum modelo novo"; exit 0; fi
+          git commit -m "Adicionar toco de arvore 3D CC0"
+          git push origin HEAD:feature/evolucao-mundo-3d
