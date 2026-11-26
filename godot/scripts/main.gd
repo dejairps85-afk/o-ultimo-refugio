@@ -651,6 +651,12 @@ func _build_abandoned_town() -> void:
 		var building := StaticBody3D.new()
 		building.name = str(spec["n"]).replace(" ", "_")
 		building.position = Vector3(building_position.x, ground_y + dimensions.y * 0.5, building_position.z)
+		# Registra o volume da construção no mapa de obstáculos global:
+		# NPCs passam a contornar fachadas e podem usar os prédios como cobertura.
+		environment_obstacles.append({
+			"position": Vector2(center.x + building_position.x, center.y + building_position.z),
+			"radius": maxf(dimensions.x, dimensions.z) * 0.48
+		})
 		var is_explorable := str(spec["n"]) in ["RESIDÊNCIA", "CLÍNICA", "MERCADO", "OFICINA", "DELEGACIA"]
 		var wall_material := _make_material(spec["c"], 0.92)
 		if is_explorable:
