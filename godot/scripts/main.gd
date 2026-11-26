@@ -23,6 +23,7 @@ var status_label: Label
 var health_bar: ProgressBar
 var enemies: Array = []
 var hostile_humans: Array[Dictionary] = []
+var faction_alerts: Dictionary = {}
 var gunshot_noise_timer := 0.0
 var gunshot_noise_position := Vector3.ZERO
 var movement_noise_timer := 0.0
@@ -1723,6 +1724,10 @@ func _has_line_of_sight(shooter: CharacterBody3D, target: CharacterBody3D) -> bo
 
 
 func _update_hostile_factions(delta: float) -> void:
+	for faction_key in faction_alerts.keys():
+		var alert_data: Dictionary = faction_alerts[faction_key]
+		alert_data["timer"] = maxf(0.0, float(alert_data.get("timer", 0.0)) - delta)
+		faction_alerts[faction_key] = alert_data
 	for hostile in hostile_humans:
 		if not bool(hostile["alive"]):
 			continue
@@ -1737,14 +1742,24 @@ func _update_hostile_factions(delta: float) -> void:
 		var foot_offset := movement_noise_position - npc.global_position
 		var foot_distance := Vector2(foot_offset.x, foot_offset.z).length()
 		var heard_footsteps := movement_noise_timer > 0.0 and foot_distance < movement_noise_radius
+		var faction_key := str(hostile["faction"])
+		var direct_detection := distance < (14.0 if crouch_enabled else 38.0)
+		if direct_detection or heard_gunshot or heard_footsteps:
+			var alert_position := player.global_position if direct_detection else gunshot_noise_position if heard_gunshot else movement_noise_position
+			faction_alerts[faction_key] = {"position": alert_position, "timer": 12.0}
+		var shared_alert: Dictionary = faction_alerts.get(faction_key, {})
+		var shared_position: Vector3 = shared_alert.get("position", npc.global_position)
+		var shared_offset := shared_position - npc.global_position
+		var shared_distance := Vector2(shared_offset.x, shared_offset.z).length()
+		var responding_to_alert := float(shared_alert.get("timer", 0.0)) > 0.0 and shared_distance < 72.0
 		if float(hostile.get("stagger_timer", 0.0)) > 0.0:
 			hostile["stagger_timer"] = maxf(0.0, float(hostile["stagger_timer"]) - delta)
 			var push: Vector3 = hostile.get("knockback", Vector3.ZERO)
 			npc.velocity.x = push.x
 			npc.velocity.z = push.z
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
-		elif distance < (14.0 if crouch_enabled else 38.0) or heard_gunshot or heard_footsteps:
-			var pursuit_target := player.global_position if distance < (14.0 if crouch_enabled else 38.0) else gunshot_noise_position if heard_gunshot else movement_noise_position
+		elif direct_detection or heard_gunshot or heard_footsteps or responding_to_alert:
+			var pursuit_target := player.global_position if direct_detection else gunshot_noise_position if heard_gunshot else movement_noise_position if heard_footsteps else shared_position
 			var pursuit_offset := pursuit_target - npc.global_position
 			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
