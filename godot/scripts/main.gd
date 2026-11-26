@@ -39,6 +39,9 @@ var shop_category := "personagens"
 var weapon_damage := 50.0
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
+var vehicle: CharacterBody3D
+var vehicle_active := false
+var vehicle_toggle_button: Button
 
 func _ready() -> void:
 	rng.randomize()
@@ -49,6 +52,7 @@ func _ready() -> void:
 	_spawn_infected()
 	_load_profile()
 	_apply_player_customization()
+	_build_vehicle()
 	_build_hud()
 
 func _setup_environment() -> void:
@@ -582,6 +586,13 @@ func _build_hud() -> void:
 	wallet_label.add_theme_font_size_override("font_size", 17)
 	wallet_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.32))
 	layer.add_child(wallet_label)
+	vehicle_toggle_button = Button.new()
+	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
+	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
+	vehicle_toggle_button.custom_minimum_size = Vector2(190, 42)
+	vehicle_toggle_button.position = Vector2(22, 192)
+	vehicle_toggle_button.pressed.connect(_toggle_vehicle)
+	layer.add_child(vehicle_toggle_button)
 	var shop_button := Button.new()
 	shop_button.text = "LOJA / INVENTÁRIO"
 	shop_button.custom_minimum_size = Vector2(190, 48)
@@ -634,8 +645,8 @@ func _shop_catalog() -> Array[Dictionary]:
 		{"id":"weapon_knife","category":"armas","name":"Faca de sobrevivência","description":"Dano corpo a corpo: 75","price":250,"kind":"weapon","damage":75.0},
 		{"id":"weapon_axe","category":"armas","name":"Machado tático","description":"Dano corpo a corpo: 110","price":500,"kind":"weapon","damage":110.0},
 		{"id":"vehicle_none","category":"veículos","name":"A pé","description":"Deslocamento padrão","price":0,"kind":"vehicle"},
-		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Veículo para explorar o mapa — garagem em desenvolvimento","price":900,"kind":"vehicle"},
-		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Veículo leve — garagem em desenvolvimento","price":1200,"kind":"vehicle"}
+		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Picape 4x4 dirigível para explorar o mapa","price":900,"kind":"vehicle"},
+		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Buggy off-road dirigível para explorar o mapa","price":1200,"kind":"vehicle"}
 	]
 
 func _build_shop_ui(layer: CanvasLayer) -> void:
@@ -735,9 +746,110 @@ func _shop_item_action(item: Dictionary) -> void:
 	if item["kind"] == "weapon":
 		weapon_damage = float(item.get("damage", 50.0))
 	_apply_player_customization()
+	if item["kind"] == "vehicle":
+		_build_vehicle()
 	_save_profile()
 	_show_shop_category(shop_category)
 	status_label.text = str(item["name"]) + " EQUIPADO"
+
+func _build_vehicle() -> void:
+	if is_instance_valid(vehicle):
+		vehicle.queue_free()
+	vehicle_active = false
+	var vehicle_id := str(equipped_items.get("vehicle", "vehicle_none"))
+	if vehicle_id == "vehicle_none":
+		return
+	vehicle = CharacterBody3D.new()
+	vehicle.name = "PlayerVehicle"
+	vehicle.position = Vector3(0, _height_at(0, -7) + 0.55, -7)
+	vehicle.floor_snap_length = 0.45
+	var collision := CollisionShape3D.new()
+	var body_shape := BoxShape3D.new()
+	body_shape.size = Vector3(1.9, 0.85, 3.4)
+	collision.shape = body_shape
+	collision.position.y = 0.62
+	vehicle.add_child(collision)
+	var chassis := MeshInstance3D.new()
+	var chassis_mesh := BoxMesh.new()
+	chassis_mesh.size = Vector3(1.95, 0.62, 3.5)
+	chassis.mesh = chassis_mesh
+	chassis.position.y = 0.62
+	chassis.material_override = _make_material(Color(0.16, 0.24, 0.19), 0.55)
+	vehicle.add_child(chassis)
+	var cabin := MeshInstance3D.new()
+	var cabin_mesh := BoxMesh.new()
+	cabin_mesh.size = Vector3(1.58, 0.82, 1.65)
+	cabin.mesh = cabin_mesh
+	cabin.position = Vector3(0, 1.28, -0.18)
+	cabin.material_override = _make_material(Color(0.10, 0.15, 0.14), 0.35)
+	vehicle.add_child(cabin)
+	for x_side in [-1.0, 1.0]:
+		for z_side in [-1.0, 1.0]:
+			var wheel := MeshInstance3D.new()
+			var wheel_mesh := CylinderMesh.new()
+			wheel_mesh.top_radius = 0.39
+			wheel_mesh.bottom_radius = 0.39
+			wheel_mesh.height = 0.24
+			wheel.mesh = wheel_mesh
+			wheel.position = Vector3(x_side * 1.0, 0.42, z_side * 1.12)
+			wheel.rotation.z = PI * 0.5
+			wheel.material_override = _make_material(Color(0.035, 0.04, 0.035), 0.95)
+			vehicle.add_child(wheel)
+	add_child(vehicle)
+	if vehicle_toggle_button:
+		vehicle_toggle_button.disabled = false
+		vehicle_toggle_button.text = "ENTRAR NO VEÍCULO"
+
+func _toggle_vehicle() -> void:
+	if not is_instance_valid(vehicle):
+		status_label.text = "ADQUIRA UM VEÍCULO NA LOJA"
+		return
+	if not vehicle_active:
+		var player_visual := player.get_node_or_null("SurvivorVisual") as Node3D
+		if player_visual:
+			player_visual.visible = false
+		player.collision_layer = 0
+		player.collision_mask = 0
+		player.velocity = Vector3.ZERO
+		remove_child(player)
+		vehicle.add_child(player)
+		player.position = Vector3(0, 1.05, 0)
+		player.rotation = Vector3.ZERO
+		vehicle_active = true
+		vehicle_toggle_button.text = "SAIR DO VEÍCULO"
+		status_label.text = "VEÍCULO: USE O JOYSTICK PARA DIRIGIR"
+	else:
+		vehicle.remove_child(player)
+		add_child(player)
+		player.global_position = vehicle.global_position + vehicle.global_transform.basis.x * 1.8 + Vector3.UP * 0.2
+		player.collision_layer = 1
+		player.collision_mask = 1
+		var player_visual := player.get_node_or_null("SurvivorVisual") as Node3D
+		if player_visual:
+			player_visual.visible = true
+		player.velocity = Vector3.ZERO
+		vehicle.velocity = Vector3.ZERO
+		vehicle_active = false
+		vehicle_toggle_button.text = "ENTRAR NO VEÍCULO"
+		status_label.text = "VOCÊ SAIU DO VEÍCULO"
+
+func _update_vehicle(delta: float) -> void:
+	if not vehicle_active or not is_instance_valid(vehicle):
+		return
+	var steering := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if _touch_move.length() > 0.08:
+		steering = _touch_move
+	var forward := -vehicle.global_transform.basis.z
+	var speed := 13.0 if str(equipped_items.get("vehicle", "")) == "vehicle_pickup" else 16.0
+	vehicle.velocity.x = forward.x * -steering.y * speed
+	vehicle.velocity.z = forward.z * -steering.y * speed
+	if absf(steering.x) > 0.08 and absf(steering.y) > 0.08:
+		vehicle.rotation.y -= steering.x * delta * 1.8 * signf(-steering.y)
+	if vehicle.is_on_floor():
+		vehicle.velocity.y = 0.0
+	else:
+		vehicle.velocity.y -= 19.0 * delta
+	vehicle.move_and_slide()
 
 func _apply_player_customization() -> void:
 	if not is_instance_valid(player):
@@ -829,6 +941,16 @@ func _trigger_game_over() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player) or game_over:
+		return
+	if vehicle_active:
+		_update_vehicle(delta)
+		_update_infected(delta)
+		if player_health <= 0.0:
+			_trigger_game_over()
+		if health_bar:
+			health_bar.value = player_health
+		if status_label and player_health > 0.0:
+			status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), _alive_enemy_count()]
 		return
 	var keyboard := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var input_dir := keyboard
