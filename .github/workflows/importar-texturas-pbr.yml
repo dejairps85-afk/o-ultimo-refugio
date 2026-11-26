@@ -58,11 +58,13 @@ jobs:
                   joined = "/".join(parts).lower()
                   url = entry["url"]
                   ext = pathlib.Path(urllib.parse.urlparse(url).path).suffix.lower()
-                  if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+                  # Somente JPG 1K: evita duplicatas PNG/2K e mapas de deslocamento.
+                  if ext not in (".jpg", ".jpeg"):
                       continue
-                  if "1k" not in joined and "2k" not in joined:
+                  if "1k" not in joined or "jpg" not in joined or "2k" in joined:
                       continue
-                  if any(k in joined for k in ("diff", "color", "albedo", "rough", "nor_gl", "normal", "disp", "ao")):
+                  # Mapas essenciais; AO e displacement ficam de fora nesta primeira versao.
+                  if any(k in joined for k in ("diff", "color", "albedo", "rough", "nor_gl", "normal")) and "disp" not in joined:
                       candidates.append((parts, entry))
               if not candidates:
                   raise SystemExit("Nenhum mapa PBR 1K/2K encontrado para " + asset_id)
