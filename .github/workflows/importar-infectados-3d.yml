@@ -1,4 +1,4 @@
-name: Importar infectados 3D rigados e animados # revisao 2
+name: Importar personagens 3D rigados do sobrevivente e infectados # revisao 3
 
 on:
   workflow_dispatch:
@@ -30,11 +30,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p assets/models/infected
+          mkdir -p assets/models/infected assets/models/player
+          curl -fL --retry 3 https://models.vinish.dev/people/soldier.glb -o /tmp/survivor-soldier.glb
           curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-walker.glb -o /tmp/zombie-walker.glb
           curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-runner.glb -o /tmp/zombie-runner.glb
           curl -fL --retry 3 https://vinish-models.pages.dev/zombies/zombie-brute.glb -o /tmp/zombie-brute.glb
           npm install --global @gltf-transform/cli
+          gltf-transform optimize /tmp/survivor-soldier.glb assets/models/player/survivor-soldier.glb
+          test -s assets/models/player/survivor-soldier.glb
           for model in zombie-walker zombie-runner zombie-brute; do
             gltf-transform optimize "/tmp/${model}.glb" "assets/models/infected/${model}.glb"
             test -s "assets/models/infected/${model}.glb"
@@ -45,6 +48,14 @@ jobs:
 
       - name: Registrar créditos e licenças
         run: |
+          mkdir -p assets/models/player
+          cat > assets/models/player/ASSET-CREDITS.txt <<'EOF'
+          Survivor Soldier
+          Autor: vinish.dev
+          Fonte: https://vinish.dev/free-3d-models/people
+          Licenca: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          Modelo de personagem rigado com animacoes Idle, Walk e Run, otimizado para o jogo.
+          EOF
           cat > assets/models/infected/ASSET-CREDITS.txt <<'EOF'
           Modelos de infectados usados em O Último Refúgio
           
