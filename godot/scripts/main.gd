@@ -411,23 +411,55 @@ func _update_alien_guards(delta: float) -> void:
 				data["aim_timer"] = 0.58
 				data["attack_timer"] = float(data.get("attack_interval", 2.5))
 				if is_instance_valid(status_label):
-					status_label.text = "SENTINELA ALIENÍGENA MIRANDO! • PREPARE A ESQUIVA"
+					status_label.text = "JUGGERNAUT PREPARA GOLPE DE IMPACTO! • AFASTE-SE" if str(data.get("class", "")) == "juggernaut" and distance < 6.0 else "SENTINELA ALIENÍGENA MIRANDO! • PREPARE A ESQUIVA"
 		if float(data["aim_timer"]) > 0.0:
 			data["aim_timer"] = maxf(0.0, float(data["aim_timer"]) - delta)
 			if float(data["aim_timer"]) <= 0.0 and distance < 34.0:
-				var start := guard.global_position + Vector3(0, 1.65, 0)
-				var finish := player.global_position + Vector3(0, 1.0, 0)
-				_spawn_alien_energy_trace(start, finish)
-				if dodge_timer <= 0.0:
-					_apply_incoming_damage(float(data.get("attack_damage", 13.0)), "ATAQUE DO JUGGERNAUT" if str(data.get("class", "")) == "juggernaut" else "DISPARO DE ENERGIA ALIENÍGENA")
-					_trigger_camera_shake(0.065)
-				elif is_instance_valid(status_label):
-					status_label.text = "DISPARO ALIENÍGENA DESVIADO!"
+				var is_juggernaut := str(data.get("class", "")) == "juggernaut"
+				if is_juggernaut and distance < 6.0:
+					_spawn_alien_shockwave(guard.global_position)
+					if dodge_timer <= 0.0:
+						_apply_incoming_damage(28.0, "ONDA DE CHOQUE DO JUGGERNAUT")
+						_trigger_camera_shake(0.15)
+					else:
+						status_label.text = "ONDA DE CHOQUE DESVIADA!"
+				else:
+					var start := guard.global_position + Vector3(0, 1.65, 0)
+					var finish := player.global_position + Vector3(0, 1.0, 0)
+					_spawn_alien_energy_trace(start, finish)
+					if dodge_timer <= 0.0:
+						_apply_incoming_damage(float(data.get("attack_damage", 13.0)), "ATAQUE DO JUGGERNAUT" if is_juggernaut else "DISPARO DE ENERGIA ALIENÍGENA")
+						_trigger_camera_shake(0.065)
+					elif is_instance_valid(status_label):
+						status_label.text = "DISPARO ALIENÍGENA DESVIADO!"
 		if guard.is_on_floor():
 			guard.velocity.y = 0.0
 		else:
 			guard.velocity.y -= 19.0 * delta
 		guard.move_and_slide()
+
+
+func _spawn_alien_shockwave(origin: Vector3) -> void:
+	var ring := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = 0.7
+	mesh.bottom_radius = 0.7
+	mesh.height = 0.12
+	ring.mesh = mesh
+	ring.position = origin + Vector3(0.0, 0.12, 0.0)
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(1.0, 0.22, 0.06, 0.78)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.emission_enabled = true
+	material.emission = Color(1.0, 0.12, 0.025)
+	material.emission_energy_multiplier = 2.5
+	ring.material_override = material
+	add_child(ring)
+	var tween := create_tween()
+	tween.tween_property(ring, "scale", Vector3(8.0, 1.0, 8.0), 0.42).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.parallel().tween_property(ring, "modulate:a", 0.0, 0.42)
+	tween.tween_callback(ring.queue_free)
 
 
 func _spawn_alien_energy_trace(from_pos: Vector3, to_pos: Vector3) -> void:
@@ -2546,11 +2578,12 @@ func _fire_rifle() -> void:
 				total_hits += 1
 				if float(alien["health"]) <= 0.0:
 					alien["alive"] = false
-					credits += 180
-					scrap += 5
+					var is_juggernaut := str(alien.get("class", "")) == "juggernaut"
+					credits += 320 if is_juggernaut else 180
+					scrap += 12 if is_juggernaut else 5
 					_save_profile()
 					alien_node.queue_free()
-					status_label.text = "SENTINELA ELIMINADA • +180 CRÉDITOS"
+					status_label.text = "JUGGERNAUT ELIMINADO • +320 CRÉDITOS" if is_juggernaut else "SENTINELA ELIMINADA • +180 CRÉDITOS"
 				break
 		for hostile in hostile_humans:
 			if not bool(hostile["alive"]):
