@@ -640,14 +640,14 @@ func _shop_catalog() -> Array[Dictionary]:
 
 func _build_shop_ui(layer: CanvasLayer) -> void:
 	shop_panel = PanelContainer.new()
-	shop_panel.anchor_left = 0.5
-	shop_panel.anchor_right = 0.5
-	shop_panel.anchor_top = 0.5
-	shop_panel.anchor_bottom = 0.5
-	shop_panel.offset_left = -250
-	shop_panel.offset_right = 250
-	shop_panel.offset_top = -285
-	shop_panel.offset_bottom = 285
+	shop_panel.anchor_left = 0.04
+	shop_panel.anchor_right = 0.96
+	shop_panel.anchor_top = 0.06
+	shop_panel.anchor_bottom = 0.94
+	shop_panel.offset_left = 0
+	shop_panel.offset_right = 0
+	shop_panel.offset_top = 0
+	shop_panel.offset_bottom = 0
 	shop_panel.visible = false
 	layer.add_child(shop_panel)
 	var outer := VBoxContainer.new()
@@ -755,6 +755,7 @@ func _apply_player_customization() -> void:
 			var mesh_instance := mesh_node as MeshInstance3D
 			if mesh_instance.mesh:
 				for surface_index in range(mesh_instance.mesh.get_surface_count()):
+					mesh_instance.set_surface_override_material(surface_index, null)
 					var source_material := mesh_instance.get_active_material(surface_index)
 					if source_material is StandardMaterial3D:
 						var tinted_material := (source_material as StandardMaterial3D).duplicate() as StandardMaterial3D
