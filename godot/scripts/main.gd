@@ -78,6 +78,8 @@ var boat_toggle_button: Button
 var boat_speed := 0.0
 var fishing_cooldown := 0.0
 var wilderness_button: Button
+var poi_cache_nodes: Array[Dictionary] = []
+var looted_poi_ids: Array[String] = []
 
 func _ready() -> void:
 	rng.randomize()
@@ -85,6 +87,7 @@ func _ready() -> void:
 	_build_terrain()
 	_build_river()
 	_scatter_environment()
+	_spawn_points_of_interest()
 	_spawn_wildlife()
 	_build_boat()
 	_build_player()
@@ -563,8 +566,93 @@ func _spawn_resource_nodes() -> void:
 		resource_nodes.append({"node": node, "kind": kind, "amount": rng.randi_range(2, 4)})
 
 
+func _spawn_points_of_interest() -> void:
+	var locations := [
+		{"id": "north_camp", "name": "ACAMPAMENTO DA SERRA", "position": Vector3(-58.0, 0.0, -48.0)},
+		{"id": "river_outpost", "name": "POSTO ABANDONADO", "position": Vector3(68.0, 0.0, 48.0)},
+		{"id": "old_hunters", "name": "ACAMPAMENTO DE CAÇADORES", "position": Vector3(-72.0, 0.0, 62.0)}
+	]
+	for data in locations:
+		var spot: Vector3 = data["position"]
+		if _is_in_river(spot.x, spot.z, 9.0):
+			continue
+		var camp := Node3D.new()
+		camp.name = "POI_" + str(data["id"])
+		camp.position = Vector3(spot.x, _height_at(spot.x, spot.z), spot.z)
+		var tent := MeshInstance3D.new()
+		var tent_mesh := PrismMesh.new()
+		tent_mesh.size = Vector3(4.2, 2.5, 3.2)
+		tent.mesh = tent_mesh
+		tent.position = Vector3(0.0, 1.15, -1.0)
+		tent.material_override = _make_material(Color(0.27, 0.30, 0.22), 0.95)
+		camp.add_child(tent)
+		var fire_ring := MeshInstance3D.new()
+		var ring_mesh := CylinderMesh.new()
+		ring_mesh.top_radius = 0.72
+		ring_mesh.bottom_radius = 0.72
+		ring_mesh.height = 0.18
+		fire_ring.mesh = ring_mesh
+		fire_ring.position = Vector3(0.0, 0.12, 2.0)
+		fire_ring.material_override = _make_material(Color(0.20, 0.19, 0.16))
+		camp.add_child(fire_ring)
+		for crate_offset in [Vector3(2.2, 0.0, 1.1), Vector3(-2.1, 0.0, -1.4)]:
+			var crate := MeshInstance3D.new()
+			var crate_mesh := BoxMesh.new()
+			crate_mesh.size = Vector3(0.9, 0.72, 0.82)
+			crate.mesh = crate_mesh
+			crate.position = crate_offset + Vector3.UP * 0.38
+			crate.material_override = _make_material(Color(0.30, 0.20, 0.11))
+			camp.add_child(crate)
+		var label := Label3D.new()
+		label.text = str(data["name"])
+		label.position = Vector3(0.0, 3.1, 0.0)
+		label.font_size = 30
+		label.modulate = Color(0.90, 0.82, 0.62)
+		camp.add_child(label)
+		add_child(camp)
+		var cache := Node3D.new()
+		cache.name = "LootCache_" + str(data["id"])
+		cache.position = camp.position + Vector3(2.2, 0.0, 1.1)
+		var chest := MeshInstance3D.new()
+		var chest_mesh := BoxMesh.new()
+		chest_mesh.size = Vector3(0.9, 0.65, 0.7)
+		chest.mesh = chest_mesh
+		chest.position.y = 0.36
+		chest.material_override = _make_material(Color(0.42, 0.27, 0.12), 0.62)
+		cache.add_child(chest)
+		add_child(cache)
+		if str(data["id"]) in looted_poi_ids:
+			cache.visible = false
+		poi_cache_nodes.append({"id": str(data["id"]), "name": str(data["name"]), "node": cache})
+
 func _interact_with_wilderness() -> void:
 	if collect_cooldown > 0.0:
+		return
+	var nearest_cache_index := -1
+	var nearest_cache_distance := 3.6
+	for i in range(poi_cache_nodes.size()):
+		var cache_data: Dictionary = poi_cache_nodes[i]
+		var cache_node := cache_data["node"] as Node3D
+		if is_instance_valid(cache_node) and cache_node.visible:
+			var cache_distance := player.global_position.distance_to(cache_node.global_position)
+			if cache_distance < nearest_cache_distance:
+				nearest_cache_distance = cache_distance
+				nearest_cache_index = i
+	if nearest_cache_index >= 0:
+		var cache_data: Dictionary = poi_cache_nodes[nearest_cache_index]
+		var poi_id := str(cache_data["id"])
+		var found_wood := rng.randi_range(3, 7)
+		var found_scrap := rng.randi_range(2, 5)
+		var found_food := rng.randi_range(1, 3)
+		wood += found_wood
+		scrap += found_scrap
+		food += found_food
+		credits += 35
+		looted_poi_ids.append(poi_id)
+		(cache_data["node"] as Node3D).visible = false
+		_save_profile()
+		collect_cooldown = 0.6
+		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +35 CRÉDITOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food]
 		return
 	var nearest_resource := 999.0
 	for data in resource_nodes:
@@ -1437,6 +1525,7 @@ func _load_profile() -> void:
 		scrap = int(config.get_value("profile", "scrap", 0))
 		food = int(config.get_value("profile", "food", 0))
 		shelter_level = int(config.get_value("profile", "shelter_level", 0))
+		looted_poi_ids = config.get_value("profile", "looted_poi_ids", looted_poi_ids)
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
@@ -1449,6 +1538,7 @@ func _save_profile() -> void:
 	config.set_value("profile", "scrap", scrap)
 	config.set_value("profile", "food", food)
 	config.set_value("profile", "shelter_level", shelter_level)
+	config.set_value("profile", "looted_poi_ids", looted_poi_ids)
 	config.save("user://survivor_profile.cfg")
 	if wallet_label:
 		wallet_label.text = "CRÉDITOS: %d" % credits
