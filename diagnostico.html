@@ -1,0 +1,80 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body {
+ background:#18252d;
+ color:white;
+ font-family:Arial;
+ text-align:center;
+ padding:20px;
+}
+canvas {display:block;margin:15px auto;max-width:100%}
+</style>
+</head>
+<body>
+<h2>TESTE GRÁFICO 3D</h2>
+<div id="status">Verificando WebGL...</div>
+<div id="scene"></div>
+
+<script>
+const status = document.getElementById('status');
+
+if (!window.WebGLRenderingContext) {
+ status.innerHTML = 'ERRO: WebGL não disponível neste navegador.';
+} else {
+ status.innerHTML = 'WebGL detectado. Carregando Three.js...';
+
+ const script = document.createElement('script');
+ script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+
+ script.onload = function() {
+   try {
+     const scene = new THREE.Scene();
+     scene.background = new THREE.Color(0x263c49);
+
+     const camera = new THREE.PerspectiveCamera(
+       70, 1, 0.1, 100
+     );
+     camera.position.z = 4;
+
+     const renderer = new THREE.WebGLRenderer({
+       antialias:true
+     });
+     renderer.setSize(300,300);
+
+     document.getElementById('scene').appendChild(
+       renderer.domElement
+     );
+
+     const geometry = new THREE.BoxGeometry();
+     const material = new THREE.MeshNormalMaterial();
+     const cube = new THREE.Mesh(geometry, material);
+     scene.add(cube);
+
+     status.innerHTML = 'SUCESSO! MOTOR 3D FUNCIONANDO.';
+
+     function animate() {
+       requestAnimationFrame(animate);
+       cube.rotation.x += 0.01;
+       cube.rotation.y += 0.015;
+       renderer.render(scene,camera);
+     }
+     animate();
+
+   } catch(e) {
+     status.innerHTML = 'ERRO 3D: ' + e.message;
+   }
+ };
+
+ script.onerror = function() {
+   status.innerHTML = 'ERRO: Não foi possível baixar Three.js.';
+ };
+
+ document.head.appendChild(script);
+}
+</script>
+</body>
+</html>
