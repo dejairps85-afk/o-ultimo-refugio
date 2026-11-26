@@ -116,30 +116,75 @@ var fishing_cooldown := 0.0
 var wilderness_button: Button
 var poi_cache_nodes: Array[Dictionary] = []
 var looted_poi_ids: Array[String] = []
+var loading_layer: CanvasLayer
+var loading_label: Label
 
 func _ready() -> void:
 	rng.randomize()
+	_build_loading_screen()
+	await get_tree().process_frame
+	_load_profile()
+	_build_hud()
+	_set_loading_message("PREPARANDO O AMBIENTE...")
+	await get_tree().process_frame
 	_setup_environment()
 	_build_terrain()
 	_build_river()
-	_scatter_environment()
+	await get_tree().process_frame
+	_set_loading_message("GERANDO FLORESTA E RECURSOS...")
+	await get_tree().process_frame
+	await _scatter_environment()
+	_set_loading_message("CONSTRUINDO CIDADE E PONTOS DE EXPLORAÇÃO...")
+	await get_tree().process_frame
 	_spawn_points_of_interest()
 	_build_abandoned_town()
 	_spawn_wildlife()
 	_build_boat()
 	_build_player()
+	await get_tree().process_frame
+	_set_loading_message("POSICIONANDO SOBREVIVENTES E AMEAÇAS...")
 	_spawn_infected()
 	_spawn_city_horde()
 	_spawn_hostile_factions()
 	_spawn_allied_survivors()
-	_load_profile()
+	await get_tree().process_frame
 	_load_saved_buildings()
 	_apply_player_customization()
 	_build_vehicle()
-	_build_hud()
 	_spawn_weapon_pickups()
 	_build_alien_mystery()
 	_spawn_alien_guards()
+	_update_wave_hud()
+	_update_mission_hud()
+	_update_world_clock_hud()
+	_show_shop_category(shop_category)
+	_set_loading_message("SOBREVIVENTE, PREPARE-SE!")
+	await get_tree().process_frame
+	if is_instance_valid(loading_layer):
+		loading_layer.queue_free()
+
+
+func _build_loading_screen() -> void:
+	loading_layer = CanvasLayer.new()
+	loading_layer.layer = 20
+	add_child(loading_layer)
+	var background := ColorRect.new()
+	background.color = Color(0.025, 0.045, 0.04, 1.0)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	loading_layer.add_child(background)
+	loading_label = Label.new()
+	loading_label.text = "O ÚLTIMO REFÚGIO\nCARREGANDO..."
+	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	loading_label.add_theme_font_size_override("font_size", 25)
+	loading_label.add_theme_color_override("font_color", Color(0.82, 0.88, 0.72))
+	loading_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	loading_layer.add_child(loading_label)
+
+
+func _set_loading_message(message: String) -> void:
+	if is_instance_valid(loading_label):
+		loading_label.text = "O ÚLTIMO REFÚGIO\n" + message
 
 
 func _build_alien_mystery() -> void:
@@ -880,6 +925,8 @@ func _scatter_environment() -> void:
 		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.45 * instance.scale.x})
 		_add_tree_collision(instance)
 		add_child(instance)
+		if i % 10 == 9:
+			await get_tree().process_frame
 	for i in range(42):
 		var x := rng.randf_range(-96, 96)
 		var z := rng.randf_range(-96, 96)
@@ -896,6 +943,8 @@ func _scatter_environment() -> void:
 		environment_obstacles.append({"position": Vector2(x, z), "radius": 1.0 * instance.scale.x})
 		_add_rock_collision(instance)
 		add_child(instance)
+		if i % 10 == 9:
+			await get_tree().process_frame
 	for i in range(18):
 		if stump_scene:
 			var x := rng.randf_range(-92, 92)
@@ -908,6 +957,8 @@ func _scatter_environment() -> void:
 				environment_obstacles.append({"position": Vector2(x, z), "radius": 0.85 * stump.scale.x})
 				_add_stump_collision(stump)
 				add_child(stump)
+				if i % 6 == 5:
+					await get_tree().process_frame
 	for i in range(80):
 		var x := rng.randf_range(-95, 95)
 		var z := rng.randf_range(-95, 95)
@@ -922,6 +973,8 @@ func _scatter_environment() -> void:
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
 		add_child(instance)
+		if i % 10 == 9:
+			await get_tree().process_frame
 	_spawn_resource_nodes()
 
 func _spawn_resource_nodes() -> void:
