@@ -28,6 +28,17 @@ var player_attack_anim_time := 0.0
 var game_over := false
 var game_over_label: Label
 var restart_button: Button
+var wallet_label: Label
+var shop_panel: PanelContainer
+var shop_list: VBoxContainer
+var shop_open := false
+var credits := 250
+var unlocked_items: Array[String] = ["character_survivor", "outfit_field", "accessory_none", "weapon_fists"]
+var equipped_items := {"character": "character_survivor", "outfit": "outfit_field", "accessory": "accessory_none", "weapon": "weapon_fists", "vehicle": "vehicle_none"}
+var shop_category := "personagens"
+var weapon_damage := 50.0
+var accessory_visual: Node3D
+var outfit_tint := Color.WHITE
 
 func _ready() -> void:
 	rng.randomize()
@@ -36,6 +47,7 @@ func _ready() -> void:
 	_scatter_environment()
 	_build_player()
 	_spawn_infected()
+	_load_profile()
 	_build_hud()
 
 func _setup_environment() -> void:
@@ -483,9 +495,11 @@ func _update_infected(delta: float) -> void:
 			var forward := -player.global_transform.basis.z
 			var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
 			if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
-				enemy_data["health"] = float(enemy_data["health"]) - 50.0
+				enemy_data["health"] = float(enemy_data["health"]) - weapon_damage
 				if float(enemy_data["health"]) <= 0.0:
 					enemy_data["alive"] = false
+					credits += 15
+					_save_profile()
 					infected.queue_free()
 
 func _alive_enemy_count() -> int:
@@ -561,6 +575,18 @@ func _build_hud() -> void:
 	jump_button.offset_bottom = -94
 	jump_button.pressed.connect(func(): jump_requested = true)
 	layer.add_child(jump_button)
+	wallet_label = Label.new()
+	wallet_label.text = "CRÉDITOS: %d" % credits
+	wallet_label.position = Vector2(22, 102)
+	wallet_label.add_theme_font_size_override("font_size", 17)
+	wallet_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.32))
+	layer.add_child(wallet_label)
+	var shop_button := Button.new()
+	shop_button.text = "LOJA / INVENTÁRIO"
+	shop_button.custom_minimum_size = Vector2(190, 48)
+	shop_button.position = Vector2(22, 138)
+	shop_button.pressed.connect(_toggle_shop)
+	layer.add_child(shop_button)
 	var attack_button := Button.new()
 	attack_button.text = "ATACAR"
 	attack_button.custom_minimum_size = Vector2(112, 58)
@@ -574,6 +600,177 @@ func _build_hud() -> void:
 	attack_button.offset_bottom = -18
 	attack_button.pressed.connect(func(): attack_requested = true)
 	layer.add_child(attack_button)
+	_build_shop_ui(layer)
+
+func _load_profile() -> void:
+	var config := ConfigFile.new()
+	if config.load("user://survivor_profile.cfg") == OK:
+		credits = int(config.get_value("profile", "credits", credits))
+		unlocked_items = config.get_value("profile", "unlocked", unlocked_items)
+		equipped_items = config.get_value("profile", "equipped", equipped_items)
+
+func _save_profile() -> void:
+	var config := ConfigFile.new()
+	config.set_value("profile", "credits", credits)
+	config.set_value("profile", "unlocked", unlocked_items)
+	config.set_value("profile", "equipped", equipped_items)
+	config.save("user://survivor_profile.cfg")
+	if wallet_label:
+		wallet_label.text = "CRÉDITOS: %d" % credits
+
+func _shop_catalog() -> Array[Dictionary]:
+	return [
+		{"id":"character_survivor","category":"personagens","name":"Sobrevivente","description":"Personagem padrão","price":0,"kind":"character"},
+		{"id":"character_ranger","category":"personagens","name":"Patrulheiro","description":"Visual alternativo de campo","price":350,"kind":"character"},
+		{"id":"character_medic","category":"personagens","name":"Médico de combate","description":"Uniforme de resgate","price":500,"kind":"character"},
+		{"id":"outfit_field","category":"roupas","name":"Uniforme tático","description":"Equipamento padrão","price":0,"kind":"outfit"},
+		{"id":"outfit_forest","category":"roupas","name":"Camuflagem floresta","description":"Tonalidade verde militar","price":180,"kind":"outfit"},
+		{"id":"outfit_desert","category":"roupas","name":"Camuflagem areia","description":"Tonalidade para terreno seco","price":180,"kind":"outfit"},
+		{"id":"accessory_none","category":"adereços","name":"Sem adereço","description":"Visual limpo","price":0,"kind":"accessory"},
+		{"id":"accessory_helmet","category":"adereços","name":"Capacete de combate","description":"Proteção visual","price":220,"kind":"accessory"},
+		{"id":"accessory_pack","category":"adereços","name":"Mochila de expedição","description":"Acessório de sobrevivência","price":160,"kind":"accessory"},
+		{"id":"weapon_fists","category":"armas","name":"Combate corpo a corpo","description":"Dano básico: 50","price":0,"kind":"weapon","damage":50.0},
+		{"id":"weapon_knife","category":"armas","name":"Faca de sobrevivência","description":"Dano corpo a corpo: 75","price":250,"kind":"weapon","damage":75.0},
+		{"id":"weapon_axe","category":"armas","name":"Machado tático","description":"Dano corpo a corpo: 110","price":500,"kind":"weapon","damage":110.0},
+		{"id":"vehicle_none","category":"veículos","name":"A pé","description":"Deslocamento padrão","price":0,"kind":"vehicle"},
+		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Veículo para explorar o mapa — garagem em desenvolvimento","price":900,"kind":"vehicle"},
+		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Veículo leve — garagem em desenvolvimento","price":1200,"kind":"vehicle"}
+	]
+
+func _build_shop_ui(layer: CanvasLayer) -> void:
+	shop_panel = PanelContainer.new()
+	shop_panel.anchor_left = 0.5
+	shop_panel.anchor_right = 0.5
+	shop_panel.anchor_top = 0.5
+	shop_panel.anchor_bottom = 0.5
+	shop_panel.offset_left = -250
+	shop_panel.offset_right = 250
+	shop_panel.offset_top = -285
+	shop_panel.offset_bottom = 285
+	shop_panel.visible = false
+	layer.add_child(shop_panel)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 9)
+	shop_panel.add_child(outer)
+	var header := HBoxContainer.new()
+	outer.add_child(header)
+	var heading := Label.new()
+	heading.text = "ARSENAL & PERSONALIZAÇÃO"
+	heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	heading.add_theme_font_size_override("font_size", 18)
+	header.add_child(heading)
+	var close := Button.new()
+	close.text = "FECHAR"
+	close.pressed.connect(_toggle_shop)
+	header.add_child(close)
+	var tabs := GridContainer.new()
+	tabs.columns = 3
+	outer.add_child(tabs)
+	for category in ["personagens", "roupas", "adereços", "armas", "veículos"]:
+		var tab := Button.new()
+		tab.text = category.to_upper()
+		tab.pressed.connect(_show_shop_category.bind(category))
+		tabs.add_child(tab)
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 400)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	outer.add_child(scroll)
+	shop_list = VBoxContainer.new()
+	shop_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(shop_list)
+	_show_shop_category(shop_category)
+
+func _toggle_shop() -> void:
+	shop_open = not shop_open
+	shop_panel.visible = shop_open
+	if shop_open:
+		_show_shop_category(shop_category)
+
+func _show_shop_category(category: String) -> void:
+	shop_category = category
+	if not is_instance_valid(shop_list):
+		return
+	for child in shop_list.get_children():
+		child.queue_free()
+	for item in _shop_catalog():
+		if item["category"] != category:
+			continue
+		var row := PanelContainer.new()
+		shop_list.add_child(row)
+		var column := VBoxContainer.new()
+		row.add_child(column)
+		var title := Label.new()
+		title.text = str(item["name"]) + "  •  " + str(item["price"]) + " créditos"
+		title.add_theme_font_size_override("font_size", 16)
+		column.add_child(title)
+		var description := Label.new()
+		description.text = str(item["description"])
+		description.add_theme_font_size_override("font_size", 12)
+		column.add_child(description)
+		var action := Button.new()
+		var item_id: String = item["id"]
+		var owned := unlocked_items.has(item_id)
+		var equipped := str(equipped_items.get(str(item["kind"]), "")) == item_id
+		if equipped:
+			action.text = "EQUIPADO"
+			action.disabled = true
+		elif owned:
+			action.text = "EQUIPAR"
+		else:
+			action.text = "ADQUIRIR"
+		action.pressed.connect(_shop_item_action.bind(item))
+		column.add_child(action)
+
+func _shop_item_action(item: Dictionary) -> void:
+	var item_id: String = item["id"]
+	if not unlocked_items.has(item_id):
+		var price := int(item["price"])
+		if credits < price:
+			status_label.text = "CRÉDITOS INSUFICIENTES"
+			return
+		credits -= price
+		unlocked_items.append(item_id)
+	equipped_items[str(item["kind"])] = item_id
+	if item["kind"] == "weapon":
+		weapon_damage = float(item.get("damage", 50.0))
+	_apply_player_customization()
+	_save_profile()
+	_show_shop_category(shop_category)
+	status_label.text = str(item["name"]) + " EQUIPADO"
+
+func _apply_player_customization() -> void:
+	if not is_instance_valid(player):
+		return
+	var outfit_id := str(equipped_items.get("outfit", "outfit_field"))
+	var tint := Color(0.72, 0.82, 0.62) if outfit_id == "outfit_forest" else Color(0.88, 0.76, 0.54) if outfit_id == "outfit_desert" else Color.WHITE
+	var visual := player.get_node_or_null("SurvivorVisual") as Node3D
+	if visual:
+		for mesh_node in visual.find_children("*", "MeshInstance3D", true, false):
+			var mesh_instance := mesh_node as MeshInstance3D
+			mesh_instance.modulate = tint
+	if is_instance_valid(accessory_visual):
+		accessory_visual.queue_free()
+	accessory_visual = Node3D.new()
+	accessory_visual.name = "EquippedAccessory"
+	player.add_child(accessory_visual)
+	var accessory_id := str(equipped_items.get("accessory", "accessory_none"))
+	if accessory_id == "accessory_helmet":
+		var helmet := MeshInstance3D.new()
+		var helmet_mesh := SphereMesh.new()
+		helmet_mesh.radius = 0.25
+		helmet_mesh.height = 0.22
+		helmet.mesh = helmet_mesh
+		helmet.position = Vector3(0, 1.91, 0)
+		helmet.material_override = _make_material(Color(0.16, 0.22, 0.16), 0.55)
+		accessory_visual.add_child(helmet)
+	elif accessory_id == "accessory_pack":
+		var pack := MeshInstance3D.new()
+		var pack_mesh := BoxMesh.new()
+		pack_mesh.size = Vector3(0.48, 0.62, 0.25)
+		pack.mesh = pack_mesh
+		pack.position = Vector3(0, 1.08, 0.36)
+		pack.material_override = _make_material(Color(0.12, 0.18, 0.12))
+		accessory_visual.add_child(pack)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
