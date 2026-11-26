@@ -274,6 +274,26 @@ func _spawn_alien_guards() -> void:
 		armor.roughness = 0.24
 		body.material_override = armor
 		guard.add_child(body)
+		# Placas segmentadas de blindagem alienígena: peitoral, ombros, antebraços e grevas.
+		var plate_mat := StandardMaterial3D.new()
+		plate_mat.albedo_color = Color(0.16, 0.23, 0.27)
+		plate_mat.metallic = 0.96
+		plate_mat.roughness = 0.16
+		for plate_spec in [
+			[Vector3(0.0, 1.42, -0.34), Vector3(0.76, 0.58, 0.22)],
+			[Vector3(-0.48, 1.55, 0.0), Vector3(0.34, 0.58, 0.48)],
+			[Vector3(0.48, 1.55, 0.0), Vector3(0.34, 0.58, 0.48)],
+			[Vector3(-0.28, 0.78, -0.02), Vector3(0.28, 0.52, 0.34)],
+			[Vector3(0.28, 0.78, -0.02), Vector3(0.28, 0.52, 0.34)],
+			[Vector3(0.0, 1.68, 0.34), Vector3(0.72, 0.58, 0.2)]
+		]:
+			var plate := MeshInstance3D.new()
+			var plate_mesh := BoxMesh.new()
+			plate_mesh.size = plate_spec[1]
+			plate.mesh = plate_mesh
+			plate.position = plate_spec[0]
+			plate.material_override = plate_mat
+			guard.add_child(plate)
 		var head := MeshInstance3D.new()
 		var head_mesh := SphereMesh.new()
 		head_mesh.radius = 0.34
@@ -300,10 +320,58 @@ func _spawn_alien_guards() -> void:
 		eye_mat.emission_energy_multiplier = 2.8
 		eye.material_override = eye_mat
 		guard.add_child(eye)
+		var visor := MeshInstance3D.new()
+		var visor_mesh := BoxMesh.new()
+		visor_mesh.size = Vector3(0.52, 0.18, 0.42)
+		visor.mesh = visor_mesh
+		visor.position = Vector3(0.0, 2.22, -0.03)
+		visor.material_override = plate_mat
+		guard.add_child(visor)
 		var point := Vector2(-88.0 + (float(i) - 0.5) * 7.0, -77.0)
 		guard.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
 		add_child(guard)
-		alien_guards.append({"node":guard,"health":260.0,"attack_timer":rng.randf_range(1.5,3.0),"aim_timer":0.0,"stagger":0.0,"alive":true})
+		var armor_label := Label3D.new()
+		armor_label.name = "AlienArmorStatus"
+		armor_label.text = "BLINDAGEM 380 | HP 520"
+		armor_label.position.y = 2.85
+		armor_label.font_size = 22
+		armor_label.modulate = Color(0.35, 0.85, 1.0)
+		guard.add_child(armor_label)
+		alien_guards.append({"node":guard,"health":520.0,"armor":380.0,"armor_max":380.0,"attack_timer":rng.randf_range(1.5,3.0),"aim_timer":0.0,"stagger":0.0,"alive":true,"armor_label":armor_label,"plate_material":plate_mat})
+
+
+func _damage_alien_guard(alien: Dictionary, raw_damage: float, weapon_id := "melee") -> void:
+	var armor_value := float(alien.get("armor", 0.0))
+	var penetration := 0.12
+	match weapon_id:
+		"weapon_sniper":
+			penetration = 0.48
+		"weapon_rifle":
+			penetration = 0.28
+		"weapon_shotgun":
+			penetration = 0.18
+		"weapon_smg":
+			penetration = 0.13
+		"weapon_pistol":
+			penetration = 0.10
+	if armor_value > 0.0:
+		var armor_damage := raw_damage * (1.0 - penetration)
+		var absorbed := minf(armor_value, armor_damage)
+		alien["armor"] = maxf(0.0, armor_value - armor_damage)
+		var overflow := maxf(0.0, armor_damage - absorbed)
+		alien["health"] = float(alien["health"]) - raw_damage * penetration - overflow
+		if float(alien["armor"]) <= 0.0:
+			var plate_material := alien.get("plate_material") as StandardMaterial3D
+			if is_instance_valid(plate_material):
+				plate_material.albedo_color = Color(0.12, 0.10, 0.10)
+				plate_material.roughness = 0.78
+			status_label.text = "BLINDAGEM ALIENÍGENA ROMPIDA! • ATAQUE AGORA!"
+	else:
+		alien["health"] = float(alien["health"]) - raw_damage
+	var label := alien.get("armor_label") as Label3D
+	if is_instance_valid(label):
+		label.text = "BLINDAGEM %d | HP %d" % [int(float(alien["armor"])), int(maxf(0.0, float(alien["health"])))]
+		label.modulate = Color(1.0, 0.35, 0.22) if float(alien["armor"]) <= 0.0 else Color(0.35, 0.85, 1.0)
 
 
 func _update_alien_guards(delta: float) -> void:
@@ -2359,8 +2427,8 @@ func _update_infected(delta: float) -> void:
 				var alien_distance := Vector2(alien_offset.x, alien_offset.z).length()
 				var alien_direction := Vector3(alien_offset.x, 0.0, alien_offset.z).normalized()
 				if alien_distance < 3.5 and forward.dot(alien_direction) > 0.15:
-					alien["health"] = float(alien["health"]) - weapon_damage
-					alien["stagger"] = 0.25
+					_damage_alien_guard(alien, weapon_damage, "melee")
+					alien["stagger"] = 0.12
 					_trigger_camera_shake(0.05)
 					status_label.text = "SENTINELA ATINGIDA • %d HP" % int(float(alien["health"]))
 					if float(alien["health"]) <= 0.0:
@@ -2467,8 +2535,8 @@ func _fire_rifle() -> void:
 				continue
 			var alien_node := alien["node"] as CharacterBody3D
 			if is_instance_valid(alien_node) and collider == alien_node:
-				alien["health"] = float(alien["health"]) - damage
-				alien["stagger"] = 0.35
+				_damage_alien_guard(alien, damage, weapon_id)
+				alien["stagger"] = 0.12
 				total_hits += 1
 				if float(alien["health"]) <= 0.0:
 					alien["alive"] = false
