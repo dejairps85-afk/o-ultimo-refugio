@@ -48,6 +48,7 @@ func _ready() -> void:
 	_build_player()
 	_spawn_infected()
 	_load_profile()
+	_apply_player_customization()
 	_build_hud()
 
 func _setup_environment() -> void:
@@ -742,12 +743,23 @@ func _apply_player_customization() -> void:
 	if not is_instance_valid(player):
 		return
 	var outfit_id := str(equipped_items.get("outfit", "outfit_field"))
+	var character_id := str(equipped_items.get("character", "character_survivor"))
 	var tint := Color(0.72, 0.82, 0.62) if outfit_id == "outfit_forest" else Color(0.88, 0.76, 0.54) if outfit_id == "outfit_desert" else Color.WHITE
+	if character_id == "character_ranger":
+		tint = tint * Color(0.86, 0.96, 0.78)
+	elif character_id == "character_medic":
+		tint = tint * Color(1.0, 0.84, 0.82)
 	var visual := player.get_node_or_null("SurvivorVisual") as Node3D
 	if visual:
 		for mesh_node in visual.find_children("*", "MeshInstance3D", true, false):
 			var mesh_instance := mesh_node as MeshInstance3D
-			mesh_instance.modulate = tint
+			if mesh_instance.mesh:
+				for surface_index in range(mesh_instance.mesh.get_surface_count()):
+					var source_material := mesh_instance.get_active_material(surface_index)
+					if source_material is StandardMaterial3D:
+						var tinted_material := (source_material as StandardMaterial3D).duplicate() as StandardMaterial3D
+						tinted_material.albedo_color = tinted_material.albedo_color * tint
+						mesh_instance.set_surface_override_material(surface_index, tinted_material)
 	if is_instance_valid(accessory_visual):
 		accessory_visual.queue_free()
 	accessory_visual = Node3D.new()
@@ -771,6 +783,16 @@ func _apply_player_customization() -> void:
 		pack.position = Vector3(0, 1.08, 0.36)
 		pack.material_override = _make_material(Color(0.12, 0.18, 0.12))
 		accessory_visual.add_child(pack)
+	var weapon_id := str(equipped_items.get("weapon", "weapon_fists"))
+	if weapon_id != "weapon_fists":
+		var weapon_mesh := MeshInstance3D.new()
+		var blade := BoxMesh.new()
+		blade.size = Vector3(0.09, 0.62 if weapon_id == "weapon_knife" else 0.95, 0.055)
+		weapon_mesh.mesh = blade
+		weapon_mesh.position = Vector3(0.38, 1.05, -0.28)
+		weapon_mesh.rotation.z = deg_to_rad(-28.0)
+		weapon_mesh.material_override = _make_material(Color(0.55, 0.58, 0.58), 0.28)
+		accessory_visual.add_child(weapon_mesh)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
