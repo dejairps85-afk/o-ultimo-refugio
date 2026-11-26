@@ -595,7 +595,7 @@ func _height_at(x: float, z: float) -> float:
 
 func _build_terrain() -> void:
 	# Geometria reduzida no navegador para diminuir custo de CPU e memória no iPhone.
-	var segments := 64 if OS.has_feature("web") else segments
+	var segments := 64 if OS.has_feature("web") else 112
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
