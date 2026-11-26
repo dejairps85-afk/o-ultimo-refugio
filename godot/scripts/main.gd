@@ -621,7 +621,7 @@ func _build_abandoned_town() -> void:
 		var building := StaticBody3D.new()
 		building.name = str(spec["n"]).replace(" ", "_")
 		building.position = Vector3(building_position.x, ground_y + dimensions.y * 0.5, building_position.z)
-		var is_explorable := str(spec["n"]) in ["CLÍNICA", "MERCADO", "DELEGACIA"]
+		var is_explorable := str(spec["n"]) in ["RESIDÊNCIA", "CLÍNICA", "MERCADO", "OFICINA", "DELEGACIA"]
 		var wall_material := _make_material(spec["c"], 0.92)
 		if is_explorable:
 			var floor_mesh := BoxMesh.new()
@@ -667,6 +667,12 @@ func _build_abandoned_town() -> void:
 			elif str(spec["n"]) == "MERCADO":
 				for shelf_x in [-3.6, 0.0, 3.6]:
 					_add_town_furniture(building, Vector3(0.72, 1.65, 2.5), Vector3(shelf_x, -dimensions.y * 0.5 + 0.95, 1.0), Color(0.35, 0.25, 0.15))
+			elif str(spec["n"]) == "RESIDÊNCIA":
+				_add_town_furniture(building, Vector3(2.4, 0.55, 1.5), Vector3(-2.8, -dimensions.y * 0.5 + 0.45, 1.6), Color(0.39, 0.31, 0.25))
+				_add_town_furniture(building, Vector3(1.2, 0.72, 0.8), Vector3(2.8, -dimensions.y * 0.5 + 0.52, 1.8), Color(0.29, 0.24, 0.19))
+			elif str(spec["n"]) == "OFICINA":
+				_add_town_furniture(building, Vector3(3.2, 0.95, 1.1), Vector3(-2.0, -dimensions.y * 0.5 + 0.65, 1.5), Color(0.24, 0.27, 0.27))
+				_add_town_furniture(building, Vector3(0.65, 1.8, 0.65), Vector3(3.2, -dimensions.y * 0.5 + 1.0, 1.7), Color(0.34, 0.29, 0.21))
 			else:
 				_add_town_furniture(building, Vector3(2.2, 0.82, 1.0), Vector3(-2.4, -dimensions.y * 0.5 + 0.62, 1.4), Color(0.22, 0.24, 0.23))
 				_add_town_furniture(building, Vector3(1.0, 1.2, 0.45), Vector3(2.8, -dimensions.y * 0.5 + 0.8, 1.7), Color(0.28, 0.30, 0.31))
@@ -981,6 +987,12 @@ func _interact_with_wilderness() -> void:
 				found_food = 0
 			"east_mercado":
 				found_food += 4
+				found_wood = 0
+			"east_residencia":
+				found_food += 2
+				found_wood += 3
+			"east_oficina":
+				found_scrap += 7
 				found_wood = 0
 			"east_delegacia":
 				found_scrap += 5
