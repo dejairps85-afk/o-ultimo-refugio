@@ -480,7 +480,7 @@ func _spawn_alien_energy_trace(from_pos: Vector3, to_pos: Vector3) -> void:
 	get_tree().create_timer(0.14).timeout.connect(beam.queue_free)
 
 
-func _update_alien_event(delta: float) -> void
+func _update_alien_event(delta: float) -> void:
 	if not is_instance_valid(alien_ufo):
 		return
 	alien_flight_phase += delta * 0.11
