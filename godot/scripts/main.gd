@@ -2952,16 +2952,23 @@ func _build_hud() -> void:
 	mobile_menu_panel.anchor_left = 1.0
 	mobile_menu_panel.anchor_right = 1.0
 	mobile_menu_panel.anchor_top = 0.0
-	mobile_menu_panel.anchor_bottom = 0.0
+	mobile_menu_panel.anchor_bottom = 1.0
 	mobile_menu_panel.offset_left = -244
 	mobile_menu_panel.offset_right = -14
 	mobile_menu_panel.offset_top = 68
-	mobile_menu_panel.offset_bottom = 570
+	mobile_menu_panel.offset_bottom = -12
 	mobile_menu_panel.visible = false
 	layer.add_child(mobile_menu_panel)
+	# O menu acompanha a altura disponível e rola em telas pequenas/na horizontal.
+	var menu_scroll := ScrollContainer.new()
+	menu_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	menu_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	menu_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	mobile_menu_panel.add_child(menu_scroll)
 	var menu_box := VBoxContainer.new()
+	menu_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	menu_box.add_theme_constant_override("separation", 5)
-	mobile_menu_panel.add_child(menu_box)
+	menu_scroll.add_child(menu_box)
 
 	wallet_label = Label.new()
 	wallet_label.text = "CRÉDITOS: %d" % credits
