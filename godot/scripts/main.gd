@@ -1001,6 +1001,7 @@ func _interact_with_wilderness() -> void:
 		var found_scrap := rng.randi_range(2, 5)
 		var found_food := rng.randi_range(1, 3)
 		var found_medicine := 0
+		var found_ammo := 0
 		match poi_id:
 			"east_clinica":
 				found_medicine = rng.randi_range(2, 4)
@@ -1014,9 +1015,11 @@ func _interact_with_wilderness() -> void:
 			"east_oficina":
 				found_scrap += 7
 				found_wood = 0
+				found_ammo = 20
 			"east_delegacia":
 				found_scrap += 5
 				credits += 75
+				found_ammo = 30
 			"faction_corvos":
 				found_scrap += 8
 				found_food += 2
@@ -1025,17 +1028,21 @@ func _interact_with_wilderness() -> void:
 				found_scrap += 11
 				found_medicine += 1
 				credits += 120
+				found_ammo = 45
 			_:
 				credits += 35
 		wood += found_wood
 		scrap += found_scrap
 		food += found_food
 		medical_supplies += found_medicine
+		rifle_reserve += found_ammo
 		looted_poi_ids.append(poi_id)
 		(cache_data["node"] as Node3D).visible = false
 		_save_profile()
 		collect_cooldown = 0.6
-		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS MÉDICOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine]
+		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS MÉDICOS" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine]if is_instance_valid(ammo_label):
+			ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
+		status_label.text = "%s: +%d MADEIRA, +%d SUCATA, +%d COMIDA, +%d KITS, +%d MUNIÇÃO" % [str(cache_data["name"]), found_wood, found_scrap, found_food, found_medicine, found_ammo]
 		return
 	var nearest_resource := 999.0
 	for data in resource_nodes:
@@ -1690,7 +1697,20 @@ func _spawn_bullet_trace(from_pos: Vector3, to_pos: Vector3) -> void:
 	trace.look_at(to_pos, Vector3.UP)
 	get_tree().create_timer(0.09).timeout.connect(trace.queue_free)
 
-func _update_hostile_factions(delta: float) -> void:
+func _update_hostile_factions(delta: float) -> void:func _has_line_of_sight(shooter: CharacterBody3D, target: CharacterBody3D) -> bool:
+	if not is_instance_valid(shooter) or not is_instance_valid(target):
+		return false
+	var origin := shooter.global_position + Vector3(0.0, 1.28, 0.0)
+	var destination := target.global_position + Vector3(0.0, 1.0, 0.0)
+	var query := PhysicsRayQueryParameters3D.create(origin, destination)
+	query.exclude = [shooter.get_rid()]
+	query.collision_mask = 1
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return true
+	return hit.get("collider") == target
+
+
 	for hostile in hostile_humans:
 		if not bool(hostile["alive"]):
 			continue
@@ -1718,16 +1738,23 @@ func _update_hostile_factions(delta: float) -> void:
 				npc.rotation.y = lerp_angle(npc.rotation.y, atan2(-toward.x, -toward.z), delta * 5.0)
 			hostile["fire_timer"] = float(hostile["fire_timer"]) - delta
 			if distance <= 27.0 and distance >= 5.0 and float(hostile["fire_timer"]) <= 0.0:
-				var muzzle := npc.global_position + Vector3(0.0, 1.28, 0.0) - npc.global_transform.basis.z * 0.65
-				var target := player.global_position + Vector3(0.0, 1.0, 0.0)
-				_spawn_bullet_trace(muzzle, target)
-				if dodge_timer <= 0.0 and rng.randf() > 0.22:
-					player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
-					_trigger_camera_shake(0.035)
-					status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
+				if _has_line_of_sight(npc, player):
+					var muzzle := npc.global_position + Vector3(0.0, 1.28, 0.0) - npc.global_transform.basis.z * 0.65
+					var target := player.global_position + Vector3(0.0, 1.0, 0.0)
+					_spawn_bullet_trace(muzzle, target)
+					if dodge_timer <= 0.0 and rng.randf() > 0.22:
+						player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
+						_trigger_camera_shake(0.035)
+						status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
+					else:
+						status_label.text = "TIROS DESVIADOS"
+					hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
 				else:
-					status_label.text = "TIROS DESVIADOS"
-				hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
+					# Sem linha de visão: aproxima-se para procurar outro ângulo.
+					var flank := _steer_around_obstacles(npc.global_position, player.global_position)
+					npc.velocity.x = flank.x * float(hostile["speed"])
+					npc.velocity.z = flank.z * float(hostile["speed"])
+					hostile["fire_timer"] = 0.35
 		else:
 			# Patrulha leve em torno do esconderijo quando não há ameaça próxima.
 			hostile["patrol_timer"] = float(hostile.get("patrol_timer", 0.0)) - delta
