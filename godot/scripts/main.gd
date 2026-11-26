@@ -14,6 +14,8 @@ var active_move_touch := -1
 var active_look_touch := -1
 var jump_requested := false
 var attack_requested := false
+var _touch_move := Vector2.ZERO
+var _attack_feedback_time := 0.0
 var rng := RandomNumberGenerator.new()
 var status_label: Label
 
@@ -328,9 +330,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.index == active_look_touch:
 			camera_pivot.rotation.y -= event.relative.x * 0.004
 			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
-
-var _touch_move := Vector2.ZERO
-var _attack_feedback_time := 0.0
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
