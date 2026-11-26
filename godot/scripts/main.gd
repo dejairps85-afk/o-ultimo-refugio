@@ -23,6 +23,7 @@ var enemies: Array = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
 var player_attack_cooldown := 0.0
+var player_attack_anim_time := 0.0
 
 func _ready() -> void:
 	rng.randomize()
@@ -386,6 +387,7 @@ func _update_infected(delta: float) -> void:
 			infected.position.y = _height_at(infected.position.x, infected.position.z)
 			_play_best_animation(enemy_data["anim"], ["walk", "run", "move"])
 		else:
+			_play_best_animation(enemy_data["anim"], ["attack", "bite", "idle", "stand"])
 			enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
 			if float(enemy_data["attack_timer"]) <= 0.0:
 				player_health = maxf(0.0, player_health - 7.0)
@@ -395,6 +397,7 @@ func _update_infected(delta: float) -> void:
 		player_attack_cooldown -= delta
 	if attack_requested and player_attack_cooldown <= 0.0:
 		player_attack_cooldown = 0.65
+		player_attack_anim_time = 0.48
 		_play_best_animation(player_animation, ["attack", "punch", "hit"])
 		for enemy_data in enemies:
 			if not enemy_data["alive"]:
@@ -406,11 +409,18 @@ func _update_infected(delta: float) -> void:
 					enemy_data["alive"] = false
 					infected.queue_free()
 
+func _alive_enemy_count() -> int:
+	var alive_count := 0
+	for enemy_data in enemies:
+		if enemy_data["alive"] and is_instance_valid(enemy_data["node"]):
+			alive_count += 1
+	return alive_count
+
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	status_label = Label.new()
-	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS"
+	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS %d" % _alive_enemy_count()
 	status_label.position = Vector2(22, 18)
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
@@ -475,9 +485,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventScreenDrag:
 		if event.index == active_move_touch:
 			var delta: Vector2 = event.position - move_touch
-			move_touch = event.position
-			var size := get_viewport().get_visible_rect().size
-			_touch_move = Vector2(clampf(delta.x / 34.0, -1.0, 1.0), clampf(delta.y / 34.0, -1.0, 1.0))
+			_touch_move = Vector2(clampf(delta.x / 72.0, -1.0, 1.0), clampf(delta.y / 72.0, -1.0, 1.0))
 		elif event.index == active_look_touch:
 			camera_pivot.rotation.y -= event.relative.x * 0.004
 			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
@@ -515,6 +523,13 @@ func _physics_process(delta: float) -> void:
 	attack_requested = false
 	jump_requested = false
 	player.move_and_slide()
+	if player_attack_anim_time > 0.0:
+		player_attack_anim_time = maxf(0.0, player_attack_anim_time - delta)
+	else:
+		if Vector2(player.velocity.x, player.velocity.z).length() > 0.35:
+			_play_best_animation(player_animation, ["run", "walk", "move"])
+		else:
+			_play_best_animation(player_animation, ["idle", "breath", "stand"])
 	var ground_y := _height_at(player.global_position.x, player.global_position.z)
 	if player.global_position.y < ground_y - 3.0:
 		player.global_position.y = ground_y + 1.0
@@ -522,7 +537,7 @@ func _physics_process(delta: float) -> void:
 	if health_bar:
 		health_bar.value = player_health
 	if status_label and player_health > 0.0 and _attack_feedback_time <= 0.0:
-		status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), enemies.size()]
+		status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), _alive_enemy_count()]
 	if _attack_feedback_time > 0.0:
 		_attack_feedback_time -= delta
 		if _attack_feedback_time <= 0.0 and is_instance_valid(status_label):
