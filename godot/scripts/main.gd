@@ -52,6 +52,7 @@ var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
 var vehicle: CharacterBody3D
 var vehicle_active := false
+var vehicle_flying := false
 var vehicle_toggle_button: Button
 var resource_label: Label
 var wood := 0
@@ -1833,7 +1834,7 @@ func _build_hud() -> void:
 	wilderness_button.pressed.connect(_interact_with_wilderness)
 	layer.add_child(wilderness_button)
 	var jump_button := Button.new()
-	jump_button.text = "PULAR"
+	jump_button.text = "VOAR / POUSAR"
 	jump_button.custom_minimum_size = Vector2(112, 58)
 	jump_button.anchor_left = 1.0
 	jump_button.anchor_right = 1.0
@@ -1996,8 +1997,14 @@ func _shop_catalog() -> Array[Dictionary]:
 		{"id":"weapon_knife","category":"armas","name":"Faca de sobrevivência","description":"Dano corpo a corpo: 75","price":250,"kind":"weapon","damage":75.0},
 		{"id":"weapon_axe","category":"armas","name":"Machado tático","description":"Dano corpo a corpo: 110","price":500,"kind":"weapon","damage":110.0},
 		{"id":"vehicle_none","category":"veículos","name":"A pé","description":"Deslocamento padrão","price":0,"kind":"vehicle"},
-		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Picape 4x4 dirigível para explorar o mapa","price":900,"kind":"vehicle"},
-		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Buggy off-road dirigível para explorar o mapa","price":1200,"kind":"vehicle"}
+		{"id":"vehicle_pickup","category":"veículos","name":"Picape 4x4","description":"Veículo leve para exploração e transporte","price":900,"kind":"vehicle"},
+		{"id":"vehicle_buggy","category":"veículos","name":"Buggy off-road","description":"Veículo rápido para trilhas","price":1200,"kind":"vehicle"},
+		{"id":"vehicle_motorcycle","category":"veículos","name":"Motocicleta trail","description":"Ágil em estradas e trilhas; baixa capacidade de carga","price":1500,"kind":"vehicle"},
+		{"id":"vehicle_truck","category":"veículos","name":"Caminhão de carga","description":"Transporte pesado de recursos","price":2600,"kind":"vehicle"},
+		{"id":"vehicle_tractor","category":"veículos","name":"Trator agrícola","description":"Máquina robusta para terrenos difíceis","price":2200,"kind":"vehicle"},
+		{"id":"vehicle_backhoe","category":"veículos","name":"Retroescavadeira","description":"Máquina de obras para futuras tarefas de construção","price":3800,"kind":"vehicle"},
+		{"id":"vehicle_airplane","category":"veículos","name":"Avião monomotor","description":"Aeronave de exploração; decolagem e pouso controlados","price":6500,"kind":"vehicle"},
+		{"id":"vehicle_helicopter","category":"veículos","name":"Helicóptero utilitário","description":"Aeronave de pouso vertical para alcançar áreas remotas","price":9000,"kind":"vehicle"}
 	]
 
 func _build_shop_ui(layer: CanvasLayer) -> void:
@@ -2105,53 +2112,126 @@ func _shop_item_action(item: Dictionary) -> void:
 	_show_shop_category(shop_category)
 	status_label.text = str(item["name"]) + " EQUIPADO"
 
+func _add_vehicle_box(parent: Node3D, size: Vector3, local_position: Vector3, color: Color, metallic: float = 0.25) -> MeshInstance3D:
+	var part := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	part.mesh = mesh
+	part.position = local_position
+	part.material_override = _make_material(color, 0.62, metallic)
+	parent.add_child(part)
+	return part
+
+
+func _add_vehicle_wheel(parent: Node3D, radius: float, width: float, local_position: Vector3) -> void:
+	var wheel := MeshInstance3D.new()
+	var mesh := CylinderMesh.new()
+	mesh.top_radius = radius
+	mesh.bottom_radius = radius
+	mesh.height = width
+	wheel.mesh = mesh
+	wheel.position = local_position
+	wheel.rotation.z = PI * 0.5
+	wheel.material_override = _make_material(Color(0.035, 0.04, 0.035), 0.96)
+	parent.add_child(wheel)
+
+
 func _build_vehicle() -> void:
 	if is_instance_valid(vehicle):
 		vehicle.queue_free()
 	vehicle_active = false
+	vehicle_flying = false
 	var vehicle_id := str(equipped_items.get("vehicle", "vehicle_none"))
 	if vehicle_id == "vehicle_none":
+		if is_instance_valid(vehicle_toggle_button):
+			vehicle_toggle_button.disabled = true
+			vehicle_toggle_button.text = "SEM VEÍCULO"
 		return
 	vehicle = CharacterBody3D.new()
-	vehicle.name = "PlayerVehicle"
-	vehicle.position = Vector3(0, _height_at(0, -7) + 0.55, -7)
+	vehicle.name = "PlayerVehicle_" + vehicle_id
+	var spawn := Vector3(0.0, _height_at(0.0, -7.0), -7.0)
+	vehicle.position = spawn
 	vehicle.floor_snap_length = 0.45
+	var is_aircraft := vehicle_id in ["vehicle_airplane", "vehicle_helicopter"]
+	var body_size := Vector3(2.0, 1.0, 4.0)
+	if vehicle_id == "vehicle_motorcycle":
+		body_size = Vector3(0.85, 1.1, 2.5)
+	elif vehicle_id == "vehicle_truck":
+		body_size = Vector3(2.8, 2.5, 7.0)
+	elif vehicle_id == "vehicle_tractor":
+		body_size = Vector3(2.7, 2.2, 4.0)
+	elif vehicle_id == "vehicle_backhoe":
+		body_size = Vector3(2.8, 2.8, 6.0)
+	elif vehicle_id == "vehicle_airplane":
+		body_size = Vector3(3.0, 1.4, 6.5)
+	elif vehicle_id == "vehicle_helicopter":
+		body_size = Vector3(2.8, 2.0, 5.5)
 	var collision := CollisionShape3D.new()
 	var body_shape := BoxShape3D.new()
-	body_shape.size = Vector3(1.9, 0.85, 3.4)
+	body_shape.size = body_size
 	collision.shape = body_shape
-	collision.position.y = 0.62
+	collision.position.y = body_size.y * 0.5
 	vehicle.add_child(collision)
-	var chassis := MeshInstance3D.new()
-	var chassis_mesh := BoxMesh.new()
-	chassis_mesh.size = Vector3(1.95, 0.62, 3.5)
-	chassis.mesh = chassis_mesh
-	chassis.position.y = 0.62
-	chassis.material_override = _make_material(Color(0.16, 0.24, 0.19), 0.55)
-	vehicle.add_child(chassis)
-	var cabin := MeshInstance3D.new()
-	var cabin_mesh := BoxMesh.new()
-	cabin_mesh.size = Vector3(1.58, 0.82, 1.65)
-	cabin.mesh = cabin_mesh
-	cabin.position = Vector3(0, 1.28, -0.18)
-	cabin.material_override = _make_material(Color(0.10, 0.15, 0.14), 0.35)
-	vehicle.add_child(cabin)
-	for x_side in [-1.0, 1.0]:
-		for z_side in [-1.0, 1.0]:
-			var wheel := MeshInstance3D.new()
-			var wheel_mesh := CylinderMesh.new()
-			wheel_mesh.top_radius = 0.39
-			wheel_mesh.bottom_radius = 0.39
-			wheel_mesh.height = 0.24
-			wheel.mesh = wheel_mesh
-			wheel.position = Vector3(x_side * 1.0, 0.42, z_side * 1.12)
-			wheel.rotation.z = PI * 0.5
-			wheel.material_override = _make_material(Color(0.035, 0.04, 0.035), 0.95)
-			vehicle.add_child(wheel)
+	var paint := Color(0.16, 0.24, 0.19)
+	if vehicle_id == "vehicle_motorcycle":
+		_add_vehicle_box(vehicle, Vector3(0.62, 0.42, 1.25), Vector3(0, 0.92, 0), Color(0.68, 0.16, 0.08))
+		_add_vehicle_box(vehicle, Vector3(0.48, 0.62, 0.52), Vector3(0, 1.38, -0.12), Color(0.12, 0.15, 0.16))
+		_add_vehicle_wheel(vehicle, 0.48, 0.22, Vector3(0, 0.48, -0.92))
+		_add_vehicle_wheel(vehicle, 0.48, 0.22, Vector3(0, 0.48, 0.92))
+	elif vehicle_id in ["vehicle_pickup", "vehicle_buggy", "vehicle_truck", "vehicle_tractor", "vehicle_backhoe"]:
+		var length := 3.5
+		var width := 1.95
+		var wheel_radius := 0.42
+		if vehicle_id == "vehicle_truck":
+			length = 6.8
+			width = 2.65
+			wheel_radius = 0.68
+		elif vehicle_id == "vehicle_tractor":
+			length = 4.2
+			width = 2.5
+			wheel_radius = 0.72
+		elif vehicle_id == "vehicle_backhoe":
+			length = 5.8
+			width = 2.6
+			wheel_radius = 0.65
+		_add_vehicle_box(vehicle, Vector3(width, 0.62, length), Vector3(0, wheel_radius + 0.25, 0), paint)
+		if vehicle_id == "vehicle_truck":
+			_add_vehicle_box(vehicle, Vector3(2.25, 1.85, 2.0), Vector3(0, 1.65, -1.65), Color(0.12, 0.20, 0.24))
+			_add_vehicle_box(vehicle, Vector3(2.5, 1.0, 3.0), Vector3(0, 1.25, 1.35), Color(0.38, 0.35, 0.27))
+		elif vehicle_id == "vehicle_tractor":
+			_add_vehicle_box(vehicle, Vector3(1.55, 1.35, 1.45), Vector3(0, 1.55, -0.45), Color(0.78, 0.48, 0.08))
+			_add_vehicle_box(vehicle, Vector3(1.15, 1.05, 1.0), Vector3(0, 1.95, -0.55), Color(0.12, 0.16, 0.13))
+		elif vehicle_id == "vehicle_backhoe":
+			_add_vehicle_box(vehicle, Vector3(1.6, 1.35, 1.5), Vector3(0, 1.55, -0.65), Color(0.82, 0.53, 0.10))
+			_add_vehicle_box(vehicle, Vector3(0.38, 2.2, 0.45), Vector3(0, 2.3, 1.85), Color(0.82, 0.53, 0.10))
+			_add_vehicle_box(vehicle, Vector3(1.0, 0.5, 0.75), Vector3(0, 1.2, 2.35), Color(0.28, 0.24, 0.16))
+		else:
+			_add_vehicle_box(vehicle, Vector3(1.55, 0.95, 1.6), Vector3(0, 1.25, -0.35), Color(0.10, 0.15, 0.14))
+		for x_side in [-1.0, 1.0]:
+			for z_side in [-1.0, 1.0]:
+				_add_vehicle_wheel(vehicle, wheel_radius, 0.28, Vector3(x_side * (width * 0.5), wheel_radius, z_side * (length * 0.32)))
+		if vehicle_id == "vehicle_truck":
+			for x_side in [-1.0, 1.0]:
+				_add_vehicle_wheel(vehicle, wheel_radius * 0.92, 0.28, Vector3(x_side * (width * 0.5), wheel_radius, 1.8))
+	elif vehicle_id == "vehicle_airplane":
+		_add_vehicle_box(vehicle, Vector3(0.72, 0.68, 5.7), Vector3(0, 1.0, 0), Color(0.68, 0.69, 0.61))
+		_add_vehicle_box(vehicle, Vector3(10.0, 0.22, 1.5), Vector3(0, 1.08, 0.25), Color(0.54, 0.58, 0.52))
+		_add_vehicle_box(vehicle, Vector3(3.2, 0.18, 0.85), Vector3(0, 1.55, 2.45), Color(0.54, 0.58, 0.52))
+		_add_vehicle_box(vehicle, Vector3(0.25, 1.15, 0.25), Vector3(0, 1.8, 2.55), Color(0.54, 0.58, 0.52))
+	elif vehicle_id == "vehicle_helicopter":
+		_add_vehicle_box(vehicle, Vector3(2.0, 1.5, 3.4), Vector3(0, 1.45, 0), Color(0.24, 0.32, 0.25))
+		_add_vehicle_box(vehicle, Vector3(0.55, 0.55, 2.4), Vector3(0, 1.65, 2.65), Color(0.20, 0.27, 0.21))
+		_add_vehicle_box(vehicle, Vector3(9.0, 0.12, 0.18), Vector3(0, 2.55, 0), Color(0.12, 0.14, 0.12))
+		_add_vehicle_box(vehicle, Vector3(0.18, 0.12, 1.7), Vector3(0, 2.55, 0), Color(0.12, 0.14, 0.12))
+		_add_vehicle_box(vehicle, Vector3(1.8, 0.12, 0.15), Vector3(0, 1.45, 0.1), Color(0.12, 0.14, 0.12))
+		for side in [-1.0, 1.0]:
+			_add_vehicle_box(vehicle, Vector3(0.12, 0.12, 3.2), Vector3(side * 1.05, 0.35, 0), Color(0.12, 0.14, 0.12))
 	add_child(vehicle)
-	if vehicle_toggle_button:
+	if is_instance_valid(vehicle_toggle_button):
 		vehicle_toggle_button.disabled = false
 		vehicle_toggle_button.text = "ENTRAR NO VEÍCULO"
+
+
 
 func _toggle_vehicle() -> void:
 	if not is_instance_valid(vehicle):
@@ -2189,19 +2269,44 @@ func _toggle_vehicle() -> void:
 func _update_vehicle(delta: float) -> void:
 	if not vehicle_active or not is_instance_valid(vehicle):
 		return
+	var vehicle_id := str(equipped_items.get("vehicle", ""))
+	var is_aircraft := vehicle_id in ["vehicle_airplane", "vehicle_helicopter"]
 	var steering := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	if _touch_move.length() > 0.08:
 		steering = _touch_move
 	var forward := -vehicle.global_transform.basis.z
-	var speed := 13.0 if str(equipped_items.get("vehicle", "")) == "vehicle_pickup" else 16.0
-	vehicle.velocity.x = forward.x * -steering.y * speed
-	vehicle.velocity.z = forward.z * -steering.y * speed
-	if absf(steering.x) > 0.08 and absf(steering.y) > 0.08:
-		vehicle.rotation.y -= steering.x * delta * 1.8 * signf(-steering.y)
-	if vehicle.is_on_floor():
-		vehicle.velocity.y = 0.0
+	var speed := 13.0
+	match vehicle_id:
+		"vehicle_motorcycle": speed = 19.0
+		"vehicle_buggy": speed = 17.0
+		"vehicle_truck": speed = 9.0
+		"vehicle_tractor": speed = 7.0
+		"vehicle_backhoe": speed = 6.0
+		"vehicle_airplane": speed = 24.0
+		"vehicle_helicopter": speed = 15.0
+	if is_aircraft:
+		if jump_requested:
+			vehicle_flying = not vehicle_flying
+			jump_requested = false
+			status_label.text = "AERONAVE: DECOLANDO" if vehicle_flying else "AERONAVE: INICIANDO POUSO"
+		vehicle.velocity.x = forward.x * -steering.y * speed
+		vehicle.velocity.z = forward.z * -steering.y * speed
+		var target_altitude := _height_at(vehicle.global_position.x, vehicle.global_position.z) + (15.0 if vehicle_flying else 0.0)
+		if vehicle_flying:
+			vehicle.velocity.y = clampf((target_altitude - vehicle.global_position.y) * 1.8, -5.0, 8.0)
+		else:
+			vehicle.velocity.y = clampf((target_altitude - vehicle.global_position.y) * 2.0, -8.0, 0.0)
+		if absf(steering.x) > 0.08:
+			vehicle.rotation.y -= steering.x * delta * 1.35 * (1.0 if steering.y <= 0.0 else -1.0)
 	else:
-		vehicle.velocity.y -= 19.0 * delta
+		vehicle.velocity.x = forward.x * -steering.y * speed
+		vehicle.velocity.z = forward.z * -steering.y * speed
+		if absf(steering.x) > 0.08 and absf(steering.y) > 0.08:
+			vehicle.rotation.y -= steering.x * delta * (2.2 if vehicle_id == "vehicle_motorcycle" else 1.5) * signf(-steering.y)
+		if vehicle.is_on_floor():
+			vehicle.velocity.y = 0.0
+		else:
+			vehicle.velocity.y -= 19.0 * delta
 	vehicle.move_and_slide()
 
 func _apply_player_customization() -> void:
