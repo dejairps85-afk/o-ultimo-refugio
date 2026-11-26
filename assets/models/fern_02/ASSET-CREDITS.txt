@@ -1,0 +1,6 @@
+Fern 02
+Autor: Rob Tuytel
+Fonte: https://polyhaven.com/a/fern_02
+Licenca: CC0 1.0 Universal
+Arquivo: fern_02_mobile.glb
+Processamento: otimizacao glTF para dispositivos moveis.
