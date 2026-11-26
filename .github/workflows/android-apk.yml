@@ -63,7 +63,7 @@ jobs:
           npx --yes @gltf-transform/cli --help >/dev/null
           while IFS= read -r -d '' file; do
             temp="${file%.glb}.normalized.glb"
-            npx --yes @gltf-transform/cli decompress "$file" "$temp"
+            npx --yes @gltf-transform/cli copy "$file" "$temp"
             npx --yes @gltf-transform/cli dequantize "$temp" "$file"
             rm -f "$temp"
           done < <(find assets -type f -name '*.glb' -print0)
