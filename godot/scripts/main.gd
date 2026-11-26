@@ -735,8 +735,8 @@ func _build_abandoned_town() -> void:
 			bulb.material_override = bulb_material
 			lamp.add_child(bulb)
 			town.add_child(lamp)
-	_add_abandoned_vehicle(town, Vector3(-7.0, _height_at(center.x - 7.0, center.y - 27.0) - _height_at(center.x, center.y), -27.0), -0.18)
-	_add_abandoned_vehicle(town, Vector3(8.0, _height_at(center.x + 8.0, center.y + 27.0) - _height_at(center.x, center.y), 27.0), 2.85)
+	_add_abandoned_vehicle(town, Vector3(-7.0, _height_at(center.x - 7.0, center.y - 27.0), -27.0), -0.18)
+	_add_abandoned_vehicle(town, Vector3(8.0, _height_at(center.x + 8.0, center.y + 27.0), 27.0), 2.85)
 	for debris_data in [
 		{"p": Vector3(-25.0, 0.25, -7.0), "s": Vector3(1.4, 0.5, 0.8)},
 		{"p": Vector3(25.0, 0.18, 8.0), "s": Vector3(1.0, 0.36, 1.1)},
