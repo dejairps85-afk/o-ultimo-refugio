@@ -73,6 +73,8 @@ var ammo_label: Label
 var weapon_pickups: Array[Dictionary] = []
 var tank_fire_cooldown := 0.0
 var tank_shells := 20
+var vehicle_health := 600.0
+var vehicle_max_health := 600.0
 
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
@@ -394,7 +396,7 @@ func _update_wildlife(delta: float) -> void:
 		if charging:
 			direction = Vector3(player.global_position.x - animal.global_position.x, 0, player.global_position.z - animal.global_position.z).normalized()
 			if distance < 1.65 and float(data["attack_timer"]) <= 0.0:
-				player_health = maxf(0.0, player_health - 8.0)
+				_apply_incoming_damage(8.0, "JAVALI")
 				data["attack_timer"] = 1.5
 				if is_instance_valid(status_label):
 					status_label.text = "JAVALI ATACOU! AFASTE-SE OU REVIDE"
@@ -1879,7 +1881,7 @@ func _update_hostile_factions(delta: float) -> void:
 						var target := player.global_position + Vector3(0.0, 1.0, 0.0)
 						_spawn_bullet_trace(muzzle, target)
 						if dodge_timer <= 0.0 and rng.randf() > 0.22:
-							player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
+							_apply_incoming_damage(rng.randf_range(5.0, 9.0), "TIROS INIMIGOS")
 							_trigger_camera_shake(0.035)
 							status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
 						else:
@@ -2045,7 +2047,7 @@ func _update_infected(delta: float) -> void:
 				enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
 			if not territorial_dormant and float(enemy_data["attack_timer"]) <= 0.0:
 				if dodge_timer <= 0.0:
-					player_health = maxf(0.0, player_health - 7.0)
+					_apply_incoming_damage(7.0, "MORDIDA DE INFECTADO")
 					_trigger_camera_shake(0.055)
 					status_label.text = "ALERTA: VOCE FOI ATACADO"
 				else:
@@ -2804,6 +2806,8 @@ func _build_vehicle() -> void:
 	vehicle_active = false
 	vehicle_flying = false
 	var vehicle_id := str(equipped_items.get("vehicle", "vehicle_none"))
+	vehicle_max_health = 600.0 if vehicle_id == "vehicle_tank" else 460.0 if vehicle_id == "vehicle_apc" else 220.0
+	vehicle_health = vehicle_max_health
 	if vehicle_id == "vehicle_none":
 		if is_instance_valid(vehicle_toggle_button):
 			vehicle_toggle_button.disabled = true
@@ -2961,6 +2965,28 @@ func _toggle_vehicle() -> void:
 		vehicle_active = false
 		vehicle_toggle_button.text = "ENTRAR NO VEÍCULO"
 		status_label.text = "VOCÊ SAIU DO VEÍCULO"
+
+func _apply_incoming_damage(amount: float, source: String) -> void:
+	if vehicle_active and is_instance_valid(vehicle):
+		var vehicle_id := str(equipped_items.get("vehicle", ""))
+		var armor_factor := 0.12 if vehicle_id == "vehicle_tank" else 0.24 if vehicle_id == "vehicle_apc" else 0.78
+		vehicle_health = maxf(0.0, vehicle_health - amount * (1.0 - armor_factor) * 2.0)
+		player_health = maxf(0.0, player_health - amount * armor_factor)
+		if vehicle_health <= 0.0:
+			status_label.text = "BLINDADO DESTRUÍDO! VOCÊ FOI EXPOSTO"
+			var destroyed_vehicle := vehicle
+			_toggle_vehicle()
+			destroyed_vehicle.queue_free()
+			vehicle = null
+		else:
+			status_label.text = "%s • BLINDAGEM %d%%" % [source, int(vehicle_health / vehicle_max_health * 100.0)]
+	else:
+		player_health = maxf(0.0, player_health - amount)
+		if is_instance_valid(status_label):
+			status_label.text = source
+	if is_instance_valid(health_bar):
+		health_bar.value = player_health
+
 
 func _update_vehicle(delta: float) -> void:
 	if not vehicle_active or not is_instance_valid(vehicle):
