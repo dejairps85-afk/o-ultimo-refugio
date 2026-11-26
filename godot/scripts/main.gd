@@ -3075,9 +3075,12 @@ func _spawn_tank_explosion(position: Vector3) -> void:
 	blast_mesh.height = 1.6
 	effect.mesh = blast_mesh
 	effect.position = position
-	effect.material_override = _make_material(Color(1.0, 0.42, 0.12), 0.28, 0.0)
-	effect.material_override.albedo_color = Color(1.0, 0.42, 0.12, 0.82)
-	effect.material_override.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var blast_material := _make_material(Color(1.0, 0.42, 0.12, 0.82), 0.28, 0.0)
+	blast_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	blast_material.emission_enabled = true
+	blast_material.emission = Color(1.0, 0.24, 0.04)
+	blast_material.emission_energy_multiplier = 2.2
+	effect.material_override = blast_material
 	add_child(effect)
 	var tween := create_tween()
 	tween.tween_property(effect, "scale", Vector3.ONE * 5.5, 0.24).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
