@@ -1337,10 +1337,10 @@ func _build_hud() -> void:
 	sprint_button.anchor_right = 1.0
 	sprint_button.anchor_top = 1.0
 	sprint_button.anchor_bottom = 1.0
-	sprint_button.offset_left = -144
-	sprint_button.offset_right = -24
-	sprint_button.offset_top = -88
-	sprint_button.offset_bottom = -28
+	sprint_button.offset_left = -300
+	sprint_button.offset_right = -160
+	sprint_button.offset_top = -230
+	sprint_button.offset_bottom = -170
 	sprint_button.pressed.connect(_toggle_sprint)
 	layer.add_child(sprint_button)
 	wallet_label = Label.new()
