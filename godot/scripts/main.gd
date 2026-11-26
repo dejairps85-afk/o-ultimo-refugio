@@ -29,6 +29,10 @@ var game_over := false
 var game_over_label: Label
 var restart_button: Button
 var wallet_label: Label
+var mission_label: Label
+var mission_kills := 0
+var mission_goal := 5
+var mission_reward_claimed := false
 var shop_panel: PanelContainer
 var shop_list: VBoxContainer
 var shop_open := false
@@ -504,6 +508,12 @@ func _update_infected(delta: float) -> void:
 				if float(enemy_data["health"]) <= 0.0:
 					enemy_data["alive"] = false
 					credits += 15
+					mission_kills = mini(mission_goal, mission_kills + 1)
+					if mission_kills >= mission_goal and not mission_reward_claimed:
+						mission_reward_claimed = true
+						credits += 100
+						status_label.text = "CONTRATO CONCLUÍDO: +100 CRÉDITOS"
+					_update_mission_hud()
 					_save_profile()
 					infected.queue_free()
 
@@ -513,6 +523,14 @@ func _alive_enemy_count() -> int:
 		if enemy_data["alive"] and is_instance_valid(enemy_data["node"]):
 			alive_count += 1
 	return alive_count
+
+func _update_mission_hud() -> void:
+	if not is_instance_valid(mission_label):
+		return
+	if mission_reward_claimed:
+		mission_label.text = "CONTRATO CONCLUÍDO  •  RECOMPENSA RECEBIDA"
+	else:
+		mission_label.text = "CONTRATO: ELIMINE INFECTADOS  %d/%d  •  RECOMPENSA: 100 CR" % [mission_kills, mission_goal]
 
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
@@ -586,17 +604,23 @@ func _build_hud() -> void:
 	wallet_label.add_theme_font_size_override("font_size", 17)
 	wallet_label.add_theme_color_override("font_color", Color(0.95, 0.78, 0.32))
 	layer.add_child(wallet_label)
+	mission_label = Label.new()
+	mission_label.position = Vector2(22, 126)
+	mission_label.add_theme_font_size_override("font_size", 15)
+	mission_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
+	layer.add_child(mission_label)
+	_update_mission_hud()
 	vehicle_toggle_button = Button.new()
 	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
 	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
 	vehicle_toggle_button.custom_minimum_size = Vector2(190, 42)
-	vehicle_toggle_button.position = Vector2(22, 192)
+	vehicle_toggle_button.position = Vector2(22, 218)
 	vehicle_toggle_button.pressed.connect(_toggle_vehicle)
 	layer.add_child(vehicle_toggle_button)
 	var shop_button := Button.new()
 	shop_button.text = "LOJA / INVENTÁRIO"
 	shop_button.custom_minimum_size = Vector2(190, 48)
-	shop_button.position = Vector2(22, 138)
+	shop_button.position = Vector2(22, 164)
 	shop_button.pressed.connect(_toggle_shop)
 	layer.add_child(shop_button)
 	var attack_button := Button.new()
@@ -620,15 +644,20 @@ func _load_profile() -> void:
 		credits = int(config.get_value("profile", "credits", credits))
 		unlocked_items = config.get_value("profile", "unlocked", unlocked_items)
 		equipped_items = config.get_value("profile", "equipped", equipped_items)
+		mission_kills = int(config.get_value("profile", "mission_kills", 0))
+		mission_reward_claimed = bool(config.get_value("profile", "mission_reward_claimed", false))
 
 func _save_profile() -> void:
 	var config := ConfigFile.new()
 	config.set_value("profile", "credits", credits)
 	config.set_value("profile", "unlocked", unlocked_items)
 	config.set_value("profile", "equipped", equipped_items)
+	config.set_value("profile", "mission_kills", mission_kills)
+	config.set_value("profile", "mission_reward_claimed", mission_reward_claimed)
 	config.save("user://survivor_profile.cfg")
 	if wallet_label:
 		wallet_label.text = "CRÉDITOS: %d" % credits
+	_update_mission_hud()
 
 func _shop_catalog() -> Array[Dictionary]:
 	return [
