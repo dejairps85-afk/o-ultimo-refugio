@@ -294,6 +294,37 @@ try{
   const terrainSegments=isMobile?80:110;const groundGeo=new THREE.PlaneGeometry(220,220,terrainSegments,terrainSegments);const gp=groundGeo.attributes.position;const colors=[];const low=new THREE.Color(0x435b38),mid=new THREE.Color(0x647b45),high=new THREE.Color(0x817b60),peak=new THREE.Color(0x9a9b89);
   for(let i=0;i<gp.count;i++){const x=gp.getX(i),z=-gp.getY(i),h=terrainHeight(x,z);gp.setZ(i,h);const c=new THREE.Color();if(h<-.45)c.copy(low).lerp(mid,Math.max(0,(h+1.4)/.95));else if(h<.85)c.copy(mid).lerp(high,Math.max(0,(h+.45)/1.3));else c.copy(high).lerp(peak,Math.min(1,(h-.85)/1.2));const variation=(Math.sin(x*1.7+z*.9)*Math.cos(z*1.3-x*.6)+1)*.035;c.offsetHSL(0,0,variation);colors.push(c.r,c.g,c.b);}
   groundGeo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));gp.needsUpdate=true;groundGeo.computeVertexNormals();groundGeo.rotateX(-Math.PI/2);const groundMaterial=new THREE.MeshStandardMaterial({vertexColors:true,map:groundTexture,bumpMap:groundBump,bumpScale:0.16,roughness:0.98});const ground=new THREE.Mesh(groundGeo,groundMaterial);ground.receiveShadow=true;scene.add(ground);
+  const pbrTextureLoader=new THREE.TextureLoader();
+  function loadPBRSet(folder,materials,repeatX,repeatY){
+    const loadMap=(file,isColor)=>new Promise((resolve,reject)=>{
+      const url=new URL('./assets/textures/'+folder+'/'+file,document.baseURI).href;
+      pbrTextureLoader.load(url,texture=>{
+        texture.wrapS=texture.wrapT=THREE.RepeatWrapping;
+        texture.repeat.set(repeatX,repeatY);
+        texture.anisotropy=Math.min(4,renderer.capabilities.getMaxAnisotropy());
+        if(isColor)texture.colorSpace=THREE.SRGBColorSpace;
+        resolve(texture);
+      },undefined,reject);
+    });
+    Promise.all([
+      loadMap('Diffuse_1k_jpg.jpg',true),
+      loadMap('nor_gl_1k_jpg.jpg',false),
+      loadMap('Rough_1k_jpg.jpg',false)
+    ]).then(([color,normal,roughness])=>{
+      materials.forEach(material=>{
+        material.map=color;
+        material.normalMap=normal;
+        material.normalScale.set(.48,.48);
+        material.roughnessMap=roughness;
+        material.bumpMap=null;
+        material.color.set(0xffffff);
+        material.roughness=1;
+        material.needsUpdate=true;
+      });
+      console.info('Material PBR carregado:',folder);
+    }).catch(error=>console.warn('Textura PBR indisponivel; mantendo material de reserva:',folder,error));
+  }
+  loadPBRSet('forest_ground_06',[groundMaterial],18,18);
   const grid=new THREE.GridHelper(220,55,0x6c8058,0x61764e);grid.position.y=-3;grid.material.opacity=0.035;grid.material.transparent=true;scene.add(grid);
   const player=new THREE.Group();player.position.y=terrainHeight(0,0);scene.add(player);
   const bodyMat=new THREE.MeshStandardMaterial({color:profile.outfitColor||'#344d68',map:clothTexture,bumpMap:makeBumpTexture('cloth'),bumpScale:.035,roughness:.94});
@@ -320,6 +351,7 @@ try{
   const resources=[];const rand=(a,b)=>a+Math.random()*(b-a);
   const barkMats=[mat(0x59402c),mat(0x6b4b32),mat(0x4d3929)],leafMats=[mat(0x244b35),mat(0x315c3c),mat(0x3d6942),mat(0x496f43)],rockMats=[mat(0x737b78),mat(0x85877d),mat(0x626c69)],bushMats=[mat(0x547b3d),mat(0x668d48),mat(0x78964d)];
   barkMats.forEach(m=>{m.map=barkTexture;m.bumpMap=barkBump;m.bumpScale=.12;m.roughness=.96;});leafMats.forEach(m=>{m.map=leafTexture;m.bumpMap=leafTexture;m.bumpScale=.035;m.roughness=.92;});bushMats.forEach(m=>{m.map=leafTexture;m.roughness=.94;});
+  loadPBRSet('eucalyptus_bark',barkMats,1,2.5);loadPBRSet('dark_rock',rockMats,1.6,1.6);
   const trunkGeo=new THREE.CylinderGeometry(.18,.3,1,7),pineGeo=new THREE.ConeGeometry(1,1,7),crownGeo=new THREE.IcosahedronGeometry(1,0),rockGeo=new THREE.DodecahedronGeometry(1,0),bushGeo=new THREE.IcosahedronGeometry(1,0),grassGeo=new THREE.ConeGeometry(.075,1,4);
   const grassBatches=leafMats.map(()=>[]),grassDummy=new THREE.Object3D();
   const treeCandidates=[];
