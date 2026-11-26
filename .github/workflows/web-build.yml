@@ -95,7 +95,11 @@ jobs:
               bodyText: document.body.innerText.slice(0,500),
               webgl: (()=>{const c=document.createElement('canvas'); return !!(c.getContext('webgl2')||c.getContext('webgl'));})()
             }));
-            await page.screenshot({path:'build/web/browser-smoke.png',fullPage:false});
+            try {
+              await page.screenshot({path:'build/web/browser-smoke.png',fullPage:false,timeout:10000,animations:'disabled'});
+            } catch (screenshotError) {
+              console.log('SCREENSHOT_WARNING='+screenshotError.message);
+            }
             console.log('BROWSER_STATE='+JSON.stringify(state));
             console.log('BROWSER_ERRORS='+JSON.stringify(errors));
             if (!state.canvas.length || !state.canvas.some(c=>c.width>0 && c.height>0)) throw new Error('Godot não criou um canvas válido no Chromium.');
