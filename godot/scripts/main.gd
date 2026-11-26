@@ -25,6 +25,9 @@ var player_animation: AnimationPlayer
 var player_health := 100.0
 var player_attack_cooldown := 0.0
 var player_attack_anim_time := 0.0
+var game_over := false
+var game_over_label: Label
+var restart_button: Button
 
 func _ready() -> void:
 	rng.randomize()
@@ -475,7 +478,11 @@ func _update_infected(delta: float) -> void:
 			if not enemy_data["alive"]:
 				continue
 			var infected: CharacterBody3D = enemy_data["node"]
-			if player.global_position.distance_to(infected.global_position) < 3.2:
+			var attack_offset := infected.global_position - player.global_position
+			var attack_distance := Vector2(attack_offset.x, attack_offset.z).length()
+			var forward := -player.global_transform.basis.z
+			var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
+			if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
 				enemy_data["health"] = float(enemy_data["health"]) - 50.0
 				if float(enemy_data["health"]) <= 0.0:
 					enemy_data["alive"] = false
@@ -505,6 +512,36 @@ func _build_hud() -> void:
 	health_bar.custom_minimum_size = Vector2(210, 18)
 	health_bar.position = Vector2(22, 76)
 	layer.add_child(health_bar)
+	game_over_label = Label.new()
+	game_over_label.text = "VOCÊ FOI DERROTADO"
+	game_over_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	game_over_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	game_over_label.add_theme_font_size_override("font_size", 34)
+	game_over_label.add_theme_color_override("font_color", Color(0.95, 0.82, 0.68))
+	game_over_label.anchor_left = 0.5
+	game_over_label.anchor_right = 0.5
+	game_over_label.anchor_top = 0.5
+	game_over_label.anchor_bottom = 0.5
+	game_over_label.offset_left = -220
+	game_over_label.offset_right = 220
+	game_over_label.offset_top = -90
+	game_over_label.offset_bottom = -20
+	game_over_label.visible = false
+	layer.add_child(game_over_label)
+	restart_button = Button.new()
+	restart_button.text = "JOGAR NOVAMENTE"
+	restart_button.custom_minimum_size = Vector2(220, 58)
+	restart_button.anchor_left = 0.5
+	restart_button.anchor_right = 0.5
+	restart_button.anchor_top = 0.5
+	restart_button.anchor_bottom = 0.5
+	restart_button.offset_left = -110
+	restart_button.offset_right = 110
+	restart_button.offset_top = 5
+	restart_button.offset_bottom = 63
+	restart_button.visible = false
+	restart_button.pressed.connect(func(): get_tree().reload_current_scene())
+	layer.add_child(restart_button)
 	var hint := Label.new()
 	hint.text = "WASD: mover  •  Espaço: pular  •  F: atacar  •  Toque esquerdo: mover  •  Arraste direito: câmera"
 	hint.position = Vector2(22, 48)
@@ -562,8 +599,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera_pivot.rotation.y -= event.relative.x * 0.004
 			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
 
+func _trigger_game_over() -> void:
+	if game_over:
+		return
+	game_over = true
+	game_over_label.visible = true
+	restart_button.visible = true
+	status_label.text = "FIM DE JOGO"
+
 func _physics_process(delta: float) -> void:
-	if not is_instance_valid(player):
+	if not is_instance_valid(player) or game_over:
 		return
 	var keyboard := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var input_dir := keyboard
@@ -589,6 +634,8 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = JUMP_VELOCITY
 	attack_requested = attack_requested or Input.is_action_just_pressed("attack")
 	_update_infected(delta)
+	if player_health <= 0.0:
+		_trigger_game_over()
 	if attack_requested:
 		status_label.text = "O ÚLTIMO REFÚGIO  |  ATAQUE"
 		_attack_feedback_time = 0.45
