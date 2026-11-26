@@ -102,12 +102,16 @@ func _build_terrain() -> void:
 	ground.mesh = mesh
 	ground.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(ground)
+	var faces := PackedVector3Array()
+	for tri in range(0, indices.size(), 3):
+		faces.append(vertices[indices[tri]])
+		faces.append(vertices[indices[tri + 1]])
+		faces.append(vertices[indices[tri + 2]])
+	var terrain_collision := ConcavePolygonShape3D.new()
+	terrain_collision.set_faces(faces)
 	var body := StaticBody3D.new()
 	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = Vector3(WORLD_SIZE, 1.0, WORLD_SIZE)
-	shape.shape = box
-	shape.position.y = -0.65
+	shape.shape = terrain_collision
 	body.add_child(shape)
 	add_child(body)
 
@@ -312,6 +316,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			if event.index == active_move_touch:
 				active_move_touch = -1
 				move_touch = Vector2.ZERO
+				_touch_move = Vector2.ZERO
 			if event.index == active_look_touch:
 				active_look_touch = -1
 	elif event is InputEventScreenDrag:
@@ -325,6 +330,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.003, -0.85, 0.15)
 
 var _touch_move := Vector2.ZERO
+var _attack_feedback_time := 0.0
 
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -353,6 +359,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = JUMP_VELOCITY
 	if attack_requested or Input.is_action_just_pressed("attack"):
 		status_label.text = "O ÚLTIMO REFÚGIO  |  ATAQUE"
+		_attack_feedback_time = 0.45
 	attack_requested = false
 	jump_requested = false
 	player.move_and_slide()
@@ -360,7 +367,7 @@ func _physics_process(delta: float) -> void:
 	if player.global_position.y < ground_y - 3.0:
 		player.global_position.y = ground_y + 1.0
 		player.velocity = Vector3.ZERO
-	if status_label and status_label.text.ends_with("ATAQUE"):
-		await get_tree().create_timer(0.45).timeout
-		if is_instance_valid(status_label):
+	if _attack_feedback_time > 0.0:
+		_attack_feedback_time -= delta
+		if _attack_feedback_time <= 0.0 and is_instance_valid(status_label):
 			status_label.text = "O ÚLTIMO REFÚGIO  |  PROTÓTIPO GODOT 4"
