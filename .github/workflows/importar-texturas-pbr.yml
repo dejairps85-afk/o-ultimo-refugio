@@ -1,0 +1,104 @@
+name: Importar texturas PBR reais
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/evolucao-mundo-3d
+    paths:
+      - .github/workflows/importar-texturas-pbr.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-pbr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout da branch de desenvolvimento
+        uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+
+      - name: Baixar mapas PBR CC0 da Poly Haven
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, urllib.request, urllib.parse, re
+          assets = {
+              "forest_ground_06": "assets/textures/forest_ground_06",
+              "rocky_terrain_02": "assets/textures/rocky_terrain_02",
+              "eucalyptus_bark": "assets/textures/eucalyptus_bark",
+              "dark_rock": "assets/textures/dark_rock",
+          }
+          headers = {"User-Agent": "O-Ultimo-Refugio/1.0 (CC0 PBR texture importer)"}
+          def get_json(url):
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req, timeout=60) as r:
+                  return json.loads(r.read().decode("utf-8"))
+          def walk(node, path=()):
+              if isinstance(node, dict):
+                  if isinstance(node.get("url"), str):
+                      yield path, node
+                  else:
+                      for k, v in node.items():
+                          yield from walk(v, path + (str(k),))
+              elif isinstance(node, list):
+                  for i, v in enumerate(node):
+                      yield from walk(v, path + (str(i),))
+          def safe_name(s):
+              return re.sub(r"[^a-zA-Z0-9_.-]+", "_", s)
+          total = 0
+          for asset_id, folder in assets.items():
+              files = get_json("https://api.polyhaven.com/files/" + asset_id)
+              candidates = []
+              for parts, entry in walk(files):
+                  joined = "/".join(parts).lower()
+                  url = entry["url"]
+                  ext = pathlib.Path(urllib.parse.urlparse(url).path).suffix.lower()
+                  if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+                      continue
+                  if "1k" not in joined and "2k" not in joined:
+                      continue
+                  if any(k in joined for k in ("diff", "color", "albedo", "rough", "nor_gl", "normal", "disp", "ao")):
+                      candidates.append((parts, entry))
+              if not candidates:
+                  raise SystemExit("Nenhum mapa PBR 1K/2K encontrado para " + asset_id)
+              out = pathlib.Path(folder)
+              out.mkdir(parents=True, exist_ok=True)
+              downloaded = []
+              for parts, entry in candidates:
+                  url = entry["url"]
+                  filename = safe_name("_".join(parts[-3:])) + pathlib.Path(urllib.parse.urlparse(url).path).suffix.lower()
+                  target = out / filename
+                  req = urllib.request.Request(url, headers=headers)
+                  with urllib.request.urlopen(req, timeout=120) as response, target.open("wb") as stream:
+                      data = response.read()
+                      stream.write(data)
+                  if not data:
+                      raise SystemExit("Arquivo vazio: " + url)
+                  total += len(data)
+                  downloaded.append(filename)
+              (out / "ASSET-CREDITS.txt").write_text(
+                  asset_id + "\nFonte: https://polyhaven.com/a/" + asset_id +
+                  "\nLicenca: CC0 1.0 Universal\nMapas PBR baixados em 1K/2K para uso mobile.\n",
+                  encoding="utf-8")
+              print(asset_id + ": " + ", ".join(downloaded))
+          print("Total de bytes baixados:", total)
+          if total > 60000000:
+              raise SystemExit("Pacote PBR excede o limite de 60 MB.")
+          PY
+
+      - name: Commit das texturas na branch de desenvolvimento
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/textures
+          if git diff --cached --quiet; then
+            echo "Nenhuma textura nova."
+            exit 0
+          fi
+          git commit -m "Adicionar pacote de texturas PBR realistas CC0"
+          git push origin HEAD:feature/evolucao-mundo-3d
