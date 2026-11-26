@@ -61,6 +61,9 @@ jobs:
       - name: Importar recursos e validar projeto
         run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --import --quit
 
+      - name: Verificar inicialização e scripts do jogo
+        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --quit-after 8
+
       - name: Exportar APK de teste
         run: |
           mkdir -p build/android
