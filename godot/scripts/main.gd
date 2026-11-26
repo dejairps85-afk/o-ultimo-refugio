@@ -71,6 +71,8 @@ var rifle_reload_timer := 0.0
 var rifle_reloading := false
 var ammo_label: Label
 var weapon_pickups: Array[Dictionary] = []
+var tank_fire_cooldown := 0.0
+var tank_shells := 20
 
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
@@ -2660,7 +2662,9 @@ func _shop_catalog() -> Array[Dictionary]:
 		{"id":"vehicle_tractor","category":"veículos","name":"Trator agrícola","description":"Máquina robusta para terrenos difíceis","price":2200,"kind":"vehicle"},
 		{"id":"vehicle_backhoe","category":"veículos","name":"Retroescavadeira","description":"Máquina de obras para futuras tarefas de construção","price":3800,"kind":"vehicle"},
 		{"id":"vehicle_airplane","category":"veículos","name":"Avião monomotor","description":"Aeronave de exploração; decolagem e pouso controlados","price":6500,"kind":"vehicle"},
-		{"id":"vehicle_helicopter","category":"veículos","name":"Helicóptero utilitário","description":"Aeronave de pouso vertical para alcançar áreas remotas","price":9000,"kind":"vehicle"}
+		{"id":"vehicle_helicopter","category":"veículos","name":"Helicóptero utilitário","description":"Aeronave de pouso vertical para alcançar áreas remotas","price":9000,"kind":"vehicle"},
+		{"id":"vehicle_tank","category":"veículos","name":"Tanque de batalha MBT","description":"Blindagem pesada, lagartas e canhão principal de alto impacto","price":18000,"kind":"vehicle"},
+		{"id":"vehicle_apc","category":"veículos","name":"Blindado de transporte 8x8","description":"Veículo blindado de apoio para atravessar zonas hostis","price":12500,"kind":"vehicle"}
 	]
 
 func _build_shop_ui(layer: CanvasLayer) -> void:
@@ -2818,6 +2822,10 @@ func _build_vehicle() -> void:
 		body_size = Vector3(2.7, 2.2, 4.0)
 	elif vehicle_id == "vehicle_backhoe":
 		body_size = Vector3(2.8, 2.8, 6.0)
+	elif vehicle_id == "vehicle_tank":
+		body_size = Vector3(3.7, 2.8, 7.2)
+	elif vehicle_id == "vehicle_apc":
+		body_size = Vector3(3.1, 2.6, 6.8)
 	elif vehicle_id == "vehicle_airplane":
 		body_size = Vector3(3.0, 1.4, 6.5)
 	elif vehicle_id == "vehicle_helicopter":
@@ -2834,6 +2842,36 @@ func _build_vehicle() -> void:
 		_add_vehicle_box(vehicle, Vector3(0.48, 0.62, 0.52), Vector3(0, 1.38, -0.12), Color(0.12, 0.15, 0.16))
 		_add_vehicle_wheel(vehicle, 0.48, 0.22, Vector3(0, 0.48, -0.92))
 		_add_vehicle_wheel(vehicle, 0.48, 0.22, Vector3(0, 0.48, 0.92))
+	elif vehicle_id in ["vehicle_tank", "vehicle_apc"]:
+		var track_color := Color(0.075, 0.085, 0.075)
+		var armor_color := Color(0.20, 0.27, 0.19) if vehicle_id == "vehicle_tank" else Color(0.24, 0.30, 0.24)
+		_add_vehicle_box(vehicle, Vector3(2.85, 0.92, 5.9), Vector3(0, 1.18, 0), armor_color)
+		_add_vehicle_box(vehicle, Vector3(3.25, 0.48, 6.45), Vector3(0, 0.62, 0), track_color)
+		for side in [-1.0, 1.0]:
+			_add_vehicle_box(vehicle, Vector3(0.34, 1.12, 6.25), Vector3(side * 1.72, 0.76, 0), track_color)
+			for wheel_index in range(5):
+				var road_wheel := MeshInstance3D.new()
+				var road_mesh := CylinderMesh.new()
+				road_mesh.top_radius = 0.39 if vehicle_id == "vehicle_tank" else 0.34
+				road_mesh.bottom_radius = road_mesh.top_radius
+				road_mesh.height = 0.22
+				road_wheel.mesh = road_mesh
+				road_wheel.position = Vector3(side * 1.77, 0.66, -2.35 + float(wheel_index) * 1.17)
+				road_wheel.rotation.z = PI * 0.5
+				road_wheel.material_override = _make_material(Color(0.32, 0.34, 0.30), 0.72, 0.35)
+				vehicle.add_child(road_wheel)
+		if vehicle_id == "vehicle_tank":
+			_add_vehicle_box(vehicle, Vector3(2.25, 0.82, 2.45), Vector3(0, 2.0, -0.35), armor_color.lightened(0.08))
+			_add_vehicle_box(vehicle, Vector3(1.15, 0.52, 1.0), Vector3(0, 2.62, -0.35), armor_color.darkened(0.12))
+			_add_vehicle_box(vehicle, Vector3(0.28, 0.28, 3.4), Vector3(0, 2.38, -2.95), Color(0.12, 0.14, 0.12), 0.72)
+			_add_vehicle_box(vehicle, Vector3(0.18, 0.18, 1.15), Vector3(0.0, 2.62, -1.55), Color(0.08, 0.10, 0.08), 0.65)
+			_add_vehicle_box(vehicle, Vector3(0.65, 0.22, 0.7), Vector3(0, 2.55, 0.85), armor_color.darkened(0.18))
+		else:
+			_add_vehicle_box(vehicle, Vector3(2.2, 1.15, 2.9), Vector3(0, 1.9, -0.25), armor_color.lightened(0.06))
+			_add_vehicle_box(vehicle, Vector3(1.0, 0.34, 1.25), Vector3(0, 2.64, -0.3), armor_color.darkened(0.12))
+			_add_vehicle_box(vehicle, Vector3(0.18, 0.16, 1.5), Vector3(0, 2.52, -1.65), Color(0.09, 0.11, 0.09))
+			for side in [-1.0, 1.0]:
+				_add_vehicle_box(vehicle, Vector3(0.12, 0.16, 0.18), Vector3(side * 1.48, 1.55, -2.8), Color(0.82, 0.72, 0.42), 0.12)
 	elif vehicle_id in ["vehicle_pickup", "vehicle_buggy", "vehicle_truck", "vehicle_tractor", "vehicle_backhoe"]:
 		var length := 3.5
 		var width := 1.95
@@ -2938,6 +2976,8 @@ func _update_vehicle(delta: float) -> void:
 		"vehicle_truck": speed = 9.0
 		"vehicle_tractor": speed = 7.0
 		"vehicle_backhoe": speed = 6.0
+		"vehicle_tank": speed = 8.0
+		"vehicle_apc": speed = 11.0
 		"vehicle_airplane": speed = 24.0
 		"vehicle_helicopter": speed = 15.0
 	if is_aircraft:
@@ -2964,6 +3004,58 @@ func _update_vehicle(delta: float) -> void:
 		else:
 			vehicle.velocity.y -= 19.0 * delta
 	vehicle.move_and_slide()
+
+
+func _fire_tank_cannon() -> void:
+	if tank_shells <= 0:
+		status_label.text = "SEM MUNIÇÃO DO CANHÃO"
+		return
+	tank_shells -= 1
+	tank_fire_cooldown = 3.2
+	var origin := vehicle.global_position + Vector3.UP * 2.35 - vehicle.global_transform.basis.z * 3.0
+	var direction := -vehicle.global_transform.basis.z
+	var target_point := origin + direction * 68.0
+	var query := PhysicsRayQueryParameters3D.create(origin, target_point)
+	query.exclude = [vehicle.get_rid()]
+	query.collision_mask = 1
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var hit_position: Vector3 = hit.get("position", target_point)
+	_spawn_bullet_trace(origin, hit_position)
+	var collider: Object = hit.get("collider")
+	var hit_name := "TIRO DO CANHÃO"
+	for enemy_data in enemies:
+		if not bool(enemy_data.get("alive", false)):
+			continue
+		var target := enemy_data.get("node") as CharacterBody3D
+		if is_instance_valid(target) and collider == target:
+			enemy_data["health"] = float(enemy_data.get("health", 0.0)) - 220.0
+			hit_name = "INFECTADO ATINGIDO"
+			if float(enemy_data["health"]) <= 0.0:
+				enemy_data["alive"] = false
+				_award_infected_kill()
+				target.queue_free()
+				hit_name = "INFECTADO ELIMINADO"
+			break
+	for hostile in hostile_humans:
+		if not bool(hostile.get("alive", false)):
+			continue
+		var target := hostile.get("node") as CharacterBody3D
+		if is_instance_valid(target) and collider == target:
+			hostile["health"] = float(hostile.get("health", 0.0)) - 260.0
+			hit_name = "BLINDADO HOSTIL ATINGIDO"
+			if float(hostile["health"]) <= 0.0:
+				hostile["alive"] = false
+				_drop_weapon_pickup(target.global_position, str(hostile.get("weapon_id", "weapon_pistol")))
+				credits += 25
+				scrap += 2
+				_save_profile()
+				target.queue_free()
+				hit_name = "COMBATENTE ELIMINADO"
+			break
+	status_label.text = "%s  •  GRANADAS 0  •  MUNIÇÃO DO CANHÃO %d" % [hit_name, tank_shells]
+	_trigger_camera_shake(0.12)
+	_save_profile()
+
 
 func _apply_player_customization() -> void:
 	if not is_instance_valid(player):
@@ -3257,6 +3349,8 @@ func _physics_process(delta: float) -> void:
 
 	if fishing_cooldown > 0.0:
 		fishing_cooldown = maxf(0.0, fishing_cooldown - delta)
+	if tank_fire_cooldown > 0.0:
+		tank_fire_cooldown = maxf(0.0, tank_fire_cooldown - delta)
 	if dodge_cooldown > 0.0:
 		dodge_cooldown = maxf(0.0, dodge_cooldown - delta)
 	if not is_instance_valid(player) or game_over:
@@ -3275,6 +3369,10 @@ func _physics_process(delta: float) -> void:
 		return
 	if vehicle_active:
 		_update_vehicle(delta)
+		attack_requested = attack_requested or Input.is_action_just_pressed("attack")
+		if attack_requested and tank_fire_cooldown <= 0.0 and str(equipped_items.get("vehicle", "")) == "vehicle_tank":
+			_fire_tank_cannon()
+		attack_requested = false
 		_update_infected(delta)
 		_update_hostile_factions(delta)
 		if player_health <= 0.0:
