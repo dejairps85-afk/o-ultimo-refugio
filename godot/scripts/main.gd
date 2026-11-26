@@ -2462,6 +2462,22 @@ func _fire_rifle() -> void:
 						_drop_weapon_pickup(infected.global_position, "weapon_pistol")
 					infected.queue_free()
 				break
+		for alien in alien_guards:
+			if not bool(alien["alive"]):
+				continue
+			var alien_node := alien["node"] as CharacterBody3D
+			if is_instance_valid(alien_node) and collider == alien_node:
+				alien["health"] = float(alien["health"]) - damage
+				alien["stagger"] = 0.35
+				total_hits += 1
+				if float(alien["health"]) <= 0.0:
+					alien["alive"] = false
+					credits += 180
+					scrap += 5
+					_save_profile()
+					alien_node.queue_free()
+					status_label.text = "SENTINELA ELIMINADA • +180 CRÉDITOS"
+				break
 		for hostile in hostile_humans:
 			if not bool(hostile["alive"]):
 				continue
