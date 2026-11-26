@@ -1210,7 +1210,7 @@ func _spawn_allied_survivors() -> void:
 		role_label.modulate = Color(0.88, 0.94, 0.82)
 		ally.add_child(role_label)
 		add_child(ally)
-		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW"})
+		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "work_timer": 6.0, "combat_timer": 0.0})
 
 func _update_allied_survivors(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -1224,19 +1224,30 @@ func _update_allied_survivors(delta: float) -> void:
 		var desired := player.global_position + player.global_transform.basis * offset
 		var distance := Vector2(ally.global_position.x - player.global_position.x, ally.global_position.z - player.global_position.z).length()
 		var target := desired
-		var nearest_enemy: Node3D = null
+		var nearest_enemy: Dictionary = {}
 		var nearest_distance := 999.0
 		for enemy_data in enemies:
-			var enemy := enemy_data.get("body") as Node3D
+			if not enemy_data["alive"]:
+				continue
+			var enemy := enemy_data["node"] as Node3D
 			if is_instance_valid(enemy):
 				var enemy_distance := ally.global_position.distance_to(enemy.global_position)
 				if enemy_distance < nearest_distance:
 					nearest_distance = enemy_distance
-					nearest_enemy = enemy
-		# Patrulheiros avançam para interceptar ameaças próximas; médicos mantêm posição junto ao grupo.
-		if str(data["role"]) == "PATRULHEIRO" and nearest_enemy and nearest_distance < 8.0:
-			target = nearest_enemy.global_position - (nearest_enemy.global_position - ally.global_position).normalized() * 2.2
+					nearest_enemy = enemy_data
+		if str(data["role"]) == "PATRULHEIRO" and not nearest_enemy.is_empty() and nearest_distance < 8.0:
+			var threat := nearest_enemy["node"] as Node3D
+			target = threat.global_position - (threat.global_position - ally.global_position).normalized() * 2.0
 			data["state"] = "DEFEND"
+			data["combat_timer"] = float(data["combat_timer"]) - delta
+			if nearest_distance < 2.5 and float(data["combat_timer"]) <= 0.0:
+				nearest_enemy["health"] = float(nearest_enemy["health"]) - 18.0
+				data["combat_timer"] = 1.25
+				if float(nearest_enemy["health"]) <= 0.0:
+					nearest_enemy["alive"] = false
+					credits += 15
+					_save_profile()
+					threat.queue_free()
 		else:
 			data["state"] = "FOLLOW"
 		if distance > 2.4:
@@ -1254,8 +1265,30 @@ func _update_allied_survivors(delta: float) -> void:
 		else:
 			ally.velocity.y = 0.0
 		ally.move_and_slide()
+		data["work_timer"] = float(data["work_timer"]) - delta
+		if float(data["work_timer"]) <= 0.0 and distance < 24.0:
+			for resource_index in range(resource_nodes.size()):
+				var resource_data: Dictionary = resource_nodes[resource_index]
+				var resource_node := resource_data["node"] as Node3D
+				if is_instance_valid(resource_node) and ally.global_position.distance_to(resource_node.global_position) < 2.0:
+					var amount := int(resource_data["amount"])
+					match str(resource_data["kind"]):
+						"wood": wood += amount
+						"scrap": scrap += amount
+						"food": food += amount
+					resource_node.queue_free()
+					resource_nodes.remove_at(resource_index)
+					data["work_timer"] = 9.0
+					_save_profile()
+					break
+		if str(data["role"]) == "MÉDICA" and player_health < 85.0 and food > 0 and float(data["work_timer"]) <= 0.0:
+			food -= 1
+			player_health = minf(100.0, player_health + 12.0)
+			data["work_timer"] = 18.0
+			_save_profile()
 		allied_survivors[index] = data
-
+	if is_instance_valid(resource_label):
+		resource_label.text = "MADEIRA %d  |  SUCATA %d  |  COMIDA %d  |  ALIADOS %d" % [wood, scrap, food, allied_survivors.size()]
 func _trigger_game_over() -> void:
 	if game_over:
 		return
