@@ -62,6 +62,11 @@ var shelter_level := 0
 var shelter_root: Node3D
 var shelter_heal_timer := 0.0
 var shelter_label: Label
+var sun_light: DirectionalLight3D
+var world_environment: WorldEnvironment
+var world_time_seconds := 420.0
+var world_day := 1
+var world_clock_label: Label
 
 func _ready() -> void:
 	rng.randomize()
@@ -78,7 +83,7 @@ func _ready() -> void:
 	_build_hud()
 
 func _setup_environment() -> void:
-	var world_env := WorldEnvironment.new()
+	world_environment = WorldEnvironment.new()
 	var env := Environment.new()
 	env.background_mode = Environment.BG_SKY
 	var sky := Sky.new()
@@ -99,17 +104,17 @@ func _setup_environment() -> void:
 	env.fog_light_color = Color(0.48, 0.53, 0.46)
 	env.fog_density = 0.006
 	env.fog_sky_affect = 0.45
-	world_env.environment = env
-	add_child(world_env)
+	world_environment.environment = env
+	add_child(world_environment)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-42, -28, 0)
-	sun.light_color = Color(1.0, 0.88, 0.68)
-	sun.light_energy = 1.35
-	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = 90.0
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
-	add_child(sun)
+	sun_light = DirectionalLight3D.new()
+	sun_light.rotation_degrees = Vector3(-42, -28, 0)
+	sun_light.light_color = Color(1.0, 0.88, 0.68)
+	sun_light.light_energy = 1.35
+	sun_light.shadow_enabled = true
+	sun_light.directional_shadow_max_distance = 90.0
+	sun_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	add_child(sun_light)
 
 func _height_at(x: float, z: float) -> float:
 	return sin(x * 0.035) * 1.6 + cos(z * 0.028) * 1.25 + sin((x + z) * 0.018) * 2.0 + cos(x * 0.075) * sin(z * 0.061) * 0.55
@@ -441,6 +446,8 @@ func _save_buildings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("world", "barricades", built_structures)
 	config.set_value("world", "shelter_level", shelter_level)
+	config.set_value("world", "world_time_seconds", world_time_seconds)
+	config.set_value("world", "world_day", world_day)
 	config.save("user://survivor_world.cfg")
 
 func _load_saved_buildings() -> void:
@@ -449,6 +456,8 @@ func _load_saved_buildings() -> void:
 		return
 	built_structures = config.get_value("world", "barricades", [])
 	shelter_level = int(config.get_value("world", "shelter_level", shelter_level))
+	world_time_seconds = float(config.get_value("world", "world_time_seconds", world_time_seconds))
+	world_day = int(config.get_value("world", "world_day", world_day))
 	if shelter_level > 0:
 		_build_shelter_visual()
 	for data in built_structures:
@@ -785,6 +794,33 @@ func _update_wave_hud() -> void:
 	else:
 		wave_label.text = "ONDA %d  •  INFECTADOS RESTANTES: %d" % [wave_number, _alive_enemy_count()]
 
+func _update_day_night(delta: float) -> void:
+	var previous_day := world_day
+	world_time_seconds += delta
+	var cycle_seconds := 900.0
+	var phase := fposmod(world_time_seconds, cycle_seconds) / cycle_seconds
+	world_day = int(floor(world_time_seconds / cycle_seconds)) + 1
+	var daylight := clampf(sin(phase * TAU - PI * 0.5) * 0.5 + 0.5, 0.0, 1.0)
+	if is_instance_valid(sun_light):
+		sun_light.rotation_degrees.x = lerpf(-8.0, -172.0, phase)
+		sun_light.light_energy = lerpf(0.08, 1.35, pow(daylight, 0.7))
+		sun_light.light_color = Color(0.48, 0.58, 0.82).lerp(Color(1.0, 0.88, 0.68), daylight)
+	if is_instance_valid(world_environment) and world_environment.environment:
+		world_environment.environment.ambient_light_energy = lerpf(0.18, 0.65, daylight)
+		world_environment.environment.fog_light_color = Color(0.08, 0.12, 0.19).lerp(Color(0.48, 0.53, 0.46), daylight)
+	if world_day != previous_day:
+		_save_buildings()
+	_update_world_clock_hud()
+
+func _update_world_clock_hud() -> void:
+	if not is_instance_valid(world_clock_label):
+		return
+	var phase := fposmod(world_time_seconds, 900.0) / 900.0
+	var minutes_total := int(phase * 24.0 * 60.0)
+	var hour := int(minutes_total / 60) % 24
+	var minute := minutes_total % 60
+	var period := "DIA" if hour >= 6 and hour < 18 else "NOITE"
+	world_clock_label.text = "DIA %d  •  %02d:%02d  •  %s" % [world_day, hour, minute, period]
 func _update_wave_director(delta: float) -> void:
 	if wave_intermission < 0.0 and _alive_enemy_count() == 0:
 		wave_intermission = 10.0
@@ -922,6 +958,12 @@ func _build_hud() -> void:
 	shelter_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
 	layer.add_child(shelter_label)
 	_update_shelter_hud()
+	world_clock_label = Label.new()
+	world_clock_label.position = Vector2(22, 194)
+	world_clock_label.add_theme_font_size_override("font_size", 14)
+	world_clock_label.add_theme_color_override("font_color", Color(0.91, 0.86, 0.66))
+	layer.add_child(world_clock_label)
+	_update_world_clock_hud()
 	vehicle_toggle_button = Button.new()
 	vehicle_toggle_button.text = "ENTRAR NO VEÍCULO" if is_instance_valid(vehicle) else "SEM VEÍCULO"
 	vehicle_toggle_button.disabled = not is_instance_valid(vehicle)
@@ -1422,6 +1464,7 @@ func _physics_process(delta: float) -> void:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
 	if not is_instance_valid(player) or game_over:
 		return
+	_update_day_night(delta)
 	_update_wave_director(delta)
 	_update_allied_survivors(delta)
 	_update_shelter_support(delta)
