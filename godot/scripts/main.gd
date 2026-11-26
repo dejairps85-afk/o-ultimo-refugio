@@ -232,6 +232,22 @@ func _find_animation_player(node: Node) -> AnimationPlayer:
 			return found
 	return null
 
+func _fit_model_height(root: Node3D, target_height: float) -> void:
+	var bounds := AABB()
+	var found := false
+	for mesh_node in root.find_children("*", "MeshInstance3D", true, false):
+		var relative_transform: Transform3D = root.global_transform.affine_inverse() * mesh_node.global_transform
+		var mesh_bounds: AABB = relative_transform * mesh_node.get_aabb()
+		if not found:
+			bounds = mesh_bounds
+			found = true
+		else:
+			bounds = bounds.merge(mesh_bounds)
+	if found and bounds.size.y > 0.01:
+		var factor := target_height / bounds.size.y
+		root.scale = Vector3.ONE * factor
+		root.position.y = -bounds.position.y * factor
+
 func _play_best_animation(anim: AnimationPlayer, keywords: Array[String]) -> void:
 	if not anim:
 		return
@@ -239,9 +255,10 @@ func _play_best_animation(anim: AnimationPlayer, keywords: Array[String]) -> voi
 	for keyword in keywords:
 		for animation_name in names:
 			if keyword in animation_name.to_lower():
-				anim.play(animation_name)
+				if anim.current_animation != animation_name:
+					anim.play(animation_name)
 				return
-	if not names.is_empty():
+	if not names.is_empty() and anim.current_animation != names[0]:
 		anim.play(names[0])
 
 func _build_player() -> void:
@@ -264,8 +281,7 @@ func _build_player() -> void:
 			var visual := survivor_scene.instantiate() as Node3D
 			visual.name = "SurvivorVisual"
 			player.add_child(visual)
-			visual.position.y = -0.92
-			visual.scale = Vector3.ONE
+			_fit_model_height(visual, 1.82)
 			player_animation = _find_animation_player(visual)
 			_play_best_animation(player_animation, ["idle", "breath", "stand"])
 	else:
@@ -320,7 +336,7 @@ func _spawn_infected() -> void:
 		enemy.name = "Infected_%02d" % i
 		var visual := packed.instantiate() as Node3D
 		enemy.add_child(visual)
-		visual.scale = Vector3.ONE
+		_fit_model_height(visual, 1.9 if i % variants.size() != 2 else 2.15)
 		var angle := rng.randf_range(0.0, TAU)
 		var distance := rng.randf_range(22.0, 38.0)
 		enemy.position = Vector3(cos(angle) * distance, _height_at(cos(angle) * distance, sin(angle) * distance), sin(angle) * distance)
