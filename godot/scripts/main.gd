@@ -1686,7 +1686,7 @@ func _spawn_hostile_factions() -> void:
 				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
 				"fire_timer": rng.randf_range(0.5, 1.8), "stagger_timer": 0.0,
 				"knockback": Vector3.ZERO, "alive": true,
-				"camp_center": camp["center"], "patrol_phase": rng.randf_range(0.0, TAU),
+				"camp_center": camp["center"], "squad_slot": i, "patrol_phase": rng.randf_range(0.0, TAU),
 				"patrol_timer": rng.randf_range(1.5, 4.0), "patrol_target": human.global_position
 			})
 
@@ -1760,11 +1760,17 @@ func _update_hostile_factions(delta: float) -> void:
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
 		elif direct_detection or heard_gunshot or heard_footsteps or responding_to_alert:
 			var pursuit_target := player.global_position if direct_detection else gunshot_noise_position if heard_gunshot else movement_noise_position if heard_footsteps else shared_position
-			var pursuit_offset := pursuit_target - npc.global_position
+			# Cada combatente ocupa um setor diferente: a equipe cerca a última posição
+			# conhecida em vez de formar uma fila compacta no mesmo ponto.
+			var squad_slot := int(hostile.get("squad_slot", 0))
+			var flank_angle := float(squad_slot) * TAU / 3.0
+			var flank_radius := 8.0 + float(squad_slot % 2) * 3.0
+			var tactical_target := pursuit_target + Vector3(cos(flank_angle) * flank_radius, 0.0, sin(flank_angle) * flank_radius)
+			var pursuit_offset := tactical_target - npc.global_position
 			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
-			if pursuit_distance > 13.0:
-				var direction := _steer_around_obstacles(npc.global_position, pursuit_target)
+			if pursuit_distance > 2.2:
+				var direction := _steer_around_obstacles(npc.global_position, tactical_target)
 				npc.velocity.x = direction.x * float(hostile["speed"])
 				npc.velocity.z = direction.z * float(hostile["speed"])
 			else:
