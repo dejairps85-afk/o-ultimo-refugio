@@ -1,0 +1,51 @@
+name: Importar sobrevivente 3D rigado
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/evolucao-mundo-3d
+    paths:
+      - .github/workflows/importar-sobrevivente-3d.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-survivor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Baixar e otimizar personagem humano
+        run: |
+          set -euo pipefail
+          mkdir -p assets/models/player
+          curl -fL --retry 3 https://models.vinish.dev/people/soldier.glb -o /tmp/survivor-soldier.glb
+          npm install --global @gltf-transform/cli
+          gltf-transform optimize /tmp/survivor-soldier.glb assets/models/player/survivor-soldier.glb
+          test -s assets/models/player/survivor-soldier.glb
+          size=$(stat -c%s assets/models/player/survivor-soldier.glb)
+          echo "Modelo do sobrevivente otimizado: $size bytes"
+          if [ "$size" -gt 2000000 ]; then echo "Modelo excede 2 MB"; exit 1; fi
+      - name: Registrar créditos CC BY 4.0
+        run: |
+          cat > assets/models/player/ASSET-CREDITS.txt <<'EOF'
+          Survivor Soldier
+          Autor: vinish.dev
+          Fonte: https://vinish.dev/free-3d-models/people
+          Licenca: Creative Commons Attribution 4.0 International (CC BY 4.0)
+          Modelo rigado com animacoes Idle, Walk e Run, otimizado para distribuicao web.
+          EOF
+      - name: Publicar modelo na branch de desenvolvimento
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/player
+          git commit -m "Adicionar sobrevivente humano 3D rigado"
+          git push origin HEAD:feature/evolucao-mundo-3d

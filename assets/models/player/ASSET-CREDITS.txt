@@ -1,0 +1,5 @@
+Survivor Soldier
+Autor: vinish.dev
+Fonte: https://vinish.dev/free-3d-models/people
+Licenca: Creative Commons Attribution 4.0 International (CC BY 4.0)
+Modelo rigado com animacoes Idle, Walk e Run, otimizado para distribuicao web.

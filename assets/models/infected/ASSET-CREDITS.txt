@@ -1,0 +1,19 @@
+Modelos de infectados usados em O Último Refúgio
+
+Zombie Walker
+Autor: vinish.dev
+Fonte: https://vinish.dev/free-3d-models/zombies
+Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Zombie Runner
+Autor: vinish.dev
+Fonte: https://vinish.dev/free-3d-models/zombies
+Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Zombie Brute
+Autor: vinish.dev
+Fonte: https://vinish.dev/free-3d-models/zombies
+Licença: Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+Os modelos foram otimizados com gltf-transform para distribuição web.
+Créditos obrigatórios mantidos conforme CC BY 4.0.

@@ -1,0 +1,140 @@
+name: Importar arvore 3D realista
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/evolucao-mundo-3d
+    paths:
+      - .github/workflows/importar-arvore-3d.yml
+
+permissions:
+  contents: write
+
+jobs:
+  import-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo do projeto
+        uses: actions/checkout@v4
+        with:
+          ref: feature/evolucao-mundo-3d
+          fetch-depth: 0
+
+      - name: Preparar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Baixar modelo CC0 da Poly Haven em glTF 1K
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/polyhaven-tree assets/models/tree_small_02
+          curl -fsSL -A "O-Ultimo-Refugio/1.0 (asset import)" \
+            https://api.polyhaven.com/files/tree_small_02 \
+            -o /tmp/polyhaven-tree/files.json
+          python3 - <<'PY'
+          import json, pathlib, urllib.request, urllib.parse
+          root = pathlib.Path("/tmp/polyhaven-tree")
+          data = json.loads((root / "files.json").read_text())
+          try:
+              descriptor = data["gltf"]["1k"]["gltf"]
+          except Exception as exc:
+              raise SystemExit("A API nao retornou glTF 1K para tree_small_02") from exc
+          if not isinstance(descriptor, dict) or not descriptor.get("url"):
+              raise SystemExit("Descritor glTF sem URL valida")
+          base = root / "tree"
+          base.mkdir(exist_ok=True)
+          def download(url, target):
+              target = pathlib.Path(target)
+              target.parent.mkdir(parents=True, exist_ok=True)
+              req = urllib.request.Request(url, headers={"User-Agent":"O-Ultimo-Refugio/1.0"})
+              with urllib.request.urlopen(req, timeout=90) as response, target.open("wb") as out:
+                  out.write(response.read())
+          main_url = descriptor["url"]
+          main_name = pathlib.Path(urllib.parse.urlparse(main_url).path).name or "tree_small_02.gltf"
+          download(main_url, base / main_name)
+          includes = descriptor.get("include", {})
+          downloaded = []
+          if isinstance(includes, dict):
+              entries = includes.items()
+          elif isinstance(includes, list):
+              entries = [(None, item) for item in includes]
+          else:
+              entries = []
+          for include_path, item in entries:
+              if isinstance(item, str):
+                  url = item
+                  rel = include_path or pathlib.Path(urllib.parse.urlparse(url).path).name
+              elif isinstance(item, dict):
+                  url = item.get("url")
+                  rel = include_path or item.get("file") or item.get("name") or pathlib.Path(urllib.parse.urlparse(url or "").path).name
+              else:
+                  continue
+              if not url:
+                  continue
+              rel_path = pathlib.PurePosixPath(str(rel))
+              if rel_path.is_absolute() or ".." in rel_path.parts:
+                  raise SystemExit("Caminho de dependencia inseguro")
+              target = base.joinpath(*rel_path.parts)
+              download(url, target)
+              downloaded.append(str(rel_path))
+          gltf_path = base / main_name
+          gltf_data = json.loads(gltf_path.read_text())
+          referenced = []
+          for section in ("images", "buffers"):
+              for entry in gltf_data.get(section, []):
+                  uri = entry.get("uri")
+                  if uri and not uri.startswith(("data:", "http://", "https://")):
+                      referenced.append(uri)
+          missing = [uri for uri in referenced if not (base / pathlib.PurePosixPath(uri)).is_file()]
+          if missing:
+              raise SystemExit("Dependencias referenciadas no encontradas: " + ", ".join(missing))
+          print(f"GLTF principal: {gltf_path}")
+          print(f"Dependencias baixadas: {len(downloaded)}")
+          print(f"Dependencias referenciadas verificadas: {len(referenced)}")
+          gltf_files = list(base.glob("*.gltf"))
+          if len(gltf_files) != 1:
+              raise SystemExit(f"Esperado 1 arquivo glTF principal; encontrados {len(gltf_files)}")
+          print(f"GLTF principal: {gltf_files[0]}")
+          print(f"Dependencias baixadas: {len(includes)}")
+          PY
+          npm install --global @gltf-transform/cli
+          INPUT="$(find /tmp/polyhaven-tree/tree -maxdepth 1 -name '*.gltf' -print -quit)"
+          test -n "$INPUT"
+          gltf-transform simplify "$INPUT" /tmp/polyhaven-tree/tree-simplified.glb --ratio 0.08 --error 0.001
+          gltf-transform optimize /tmp/polyhaven-tree/tree-simplified.glb assets/models/tree_small_02/tree_small_02_mobile.glb
+          test -s assets/models/tree_small_02/tree_small_02_mobile.glb
+          SIZE=$(stat -c%s assets/models/tree_small_02/tree_small_02_mobile.glb)
+          echo "Modelo GLB otimizado: $SIZE bytes"
+          if [ "$SIZE" -gt 25000000 ]; then
+            echo "Modelo otimizado excede 25 MB; abortando para nao sobrecarregar o repositorio."
+            exit 1
+          fi
+
+      - name: Registrar origem e licenca
+        run: |
+          cat > assets/models/tree_small_02/ASSET-CREDITS.txt <<'EOF'
+          Tree Small 02
+          Autor: Rico Cilliers
+          Fonte: https://polyhaven.com/a/tree_small_02
+          Licenca: CC0 1.0 Universal (uso e redistribuicao permitidos)
+          Arquivo no jogo: tree_small_02_mobile.glb
+          Processamento: simplificacao de malha para uso em dispositivos moveis e empacotamento GLB.
+          Nota: a versao original e de alta densidade; a versao otimizada deve ser validada visualmente e em desempenho antes de uso em massa.
+          EOF
+
+      - name: Commit do modelo na branch de desenvolvimento
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/models/tree_small_02
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteracao de modelo para registrar."
+            exit 0
+          fi
+          git commit -m "Adicionar arvore 3D realista otimizada para mobile"
+          git push origin HEAD:feature/evolucao-mundo-3d

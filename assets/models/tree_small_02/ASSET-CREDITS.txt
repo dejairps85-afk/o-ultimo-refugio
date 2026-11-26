@@ -1,0 +1,7 @@
+Tree Small 02
+Autor: Rico Cilliers
+Fonte: https://polyhaven.com/a/tree_small_02
+Licenca: CC0 1.0 Universal (uso e redistribuicao permitidos)
+Arquivo no jogo: tree_small_02_mobile.glb
+Processamento: simplificacao de malha para uso em dispositivos moveis e empacotamento GLB.
+Nota: a versao original e de alta densidade; a versao otimizada deve ser validada visualmente e em desempenho antes de uso em massa.
