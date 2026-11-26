@@ -1,0 +1,5 @@
+Tree Stump 01
+Autor: Rob Tuytel
+Fonte: https://polyhaven.com/a/tree_stump_01
+Licenca: CC0 1.0 Universal
+Modelo glTF 1K simplificado e otimizado para web/mobile.
