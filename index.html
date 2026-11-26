@@ -435,6 +435,46 @@ try{
     });
   }
   loadRealisticRockAssets();
+  function loadRealisticFernAssets(){
+    const modelUrl=new URL('./assets/models/fern_02/fern_02_mobile.glb',document.baseURI).href;
+    const loader=new GLTFLoader();
+    loader.load(modelUrl,gltf=>{
+      const source=gltf.scene;
+      const bounds=new THREE.Box3().setFromObject(source);
+      const size=bounds.getSize(new THREE.Vector3());
+      const maxDim=Math.max(size.x,size.y,size.z);
+      if(!Number.isFinite(maxDim)||maxDim<.05){console.warn('Modelo de samambaia com dimensões inválidas.');return;}
+      const targetHeight=isMobile?.95:1.15;
+      const scale=targetHeight/Math.max(size.y,.05);
+      const center=bounds.getCenter(new THREE.Vector3());
+      const count=isMobile?16:30;
+      let placed=0;
+      for(let i=0;i<count;i++){
+        const x=rand(-94,94),z=rand(-94,94);
+        if(Math.hypot(x,z)<13)continue;
+        const fern=source.clone(true);
+        fern.scale.setScalar(scale);
+        fern.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+        fern.rotation.y=rand(0,Math.PI*2);
+        fern.traverse(node=>{
+          if(node.isMesh){
+            node.castShadow=!isMobile;
+            node.receiveShadow=!isMobile;
+            node.frustumCulled=true;
+          }
+        });
+        const group=new THREE.Group();
+        group.position.set(x,terrainHeight(x,z),z);
+        group.add(fern);
+        scene.add(group);
+        placed++;
+      }
+      console.info('Samambaias 3D realistas carregadas:',placed);
+    },undefined,error=>{
+      console.warn('Modelo de samambaia indisponível; mantendo vegetação de reserva.',error);
+    });
+  }
+  loadRealisticFernAssets();
   for(let i=0;i<grassTuftCount;i++){const x=rand(-98,98),z=rand(-98,98);if(Math.hypot(x,z)>11)grassTuft(x,z);}
   for(let i=0;i<grassBatches.length;i++){const matrices=grassBatches[i];if(!matrices.length)continue;const batch=new THREE.InstancedMesh(grassGeo,leafMats[i],matrices.length);batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);for(let j=0;j<matrices.length;j++)batch.setMatrixAt(j,matrices[j]);batch.instanceMatrix.needsUpdate=true;batch.frustumCulled=true;batch.castShadow=false;batch.receiveShadow=false;scene.add(batch);}
   const inv={wood:0,stone:0,berries:0};let hp=100,food=100,water=100,elapsed=0,started=false,dead=false,day=1,velY=0,isGrounded=true;
