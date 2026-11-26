@@ -1801,25 +1801,36 @@ func _update_hostile_factions(delta: float) -> void:
 				npc.velocity.z = move_toward(npc.velocity.z, 0.0, 8.0 * delta)
 			if distance > 0.5:
 				npc.rotation.y = lerp_angle(npc.rotation.y, atan2(-toward.x, -toward.z), delta * 5.0)
+			# O inimigo prepara o disparo por alguns instantes: o jogador recebe
+			# uma janela legível para esquivar ou procurar cobertura.
 			hostile["fire_timer"] = float(hostile["fire_timer"]) - delta
-			if distance <= 27.0 and distance >= 5.0 and float(hostile["fire_timer"]) <= 0.0:
-				if _has_line_of_sight(npc, player):
-					var muzzle := npc.global_position + Vector3(0.0, 1.28, 0.0) - npc.global_transform.basis.z * 0.65
-					var target := player.global_position + Vector3(0.0, 1.0, 0.0)
-					_spawn_bullet_trace(muzzle, target)
-					if dodge_timer <= 0.0 and rng.randf() > 0.22:
-						player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
-						_trigger_camera_shake(0.035)
-						status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
-					else:
-						status_label.text = "TIROS DESVIADOS"
-					hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
-				else:
-					# Sem linha de visão: aproxima-se para procurar outro ângulo.
-					var flank := _steer_around_obstacles(npc.global_position, player.global_position)
-					npc.velocity.x = flank.x * float(hostile["speed"])
-					npc.velocity.z = flank.z * float(hostile["speed"])
-					hostile["fire_timer"] = 0.35
+			var has_shot_line := distance <= 27.0 and distance >= 5.0 and _has_line_of_sight(npc, player)
+			if has_shot_line:
+				if not bool(hostile.get("aiming", false)) and float(hostile["fire_timer"]) <= 0.0:
+					hostile["aiming"] = true
+					hostile["aim_timer"] = 0.52
+					status_label.text = "INIMIGO MIRANDO!  •  ESQUIVE"
+				if bool(hostile.get("aiming", false)):
+					hostile["aim_timer"] = float(hostile.get("aim_timer", 0.52)) - delta
+					if float(hostile["aim_timer"]) <= 0.0:
+						var muzzle := npc.global_position + Vector3(0.0, 1.28, 0.0) - npc.global_transform.basis.z * 0.65
+						var target := player.global_position + Vector3(0.0, 1.0, 0.0)
+						_spawn_bullet_trace(muzzle, target)
+						if dodge_timer <= 0.0 and rng.randf() > 0.22:
+							player_health = maxf(0.0, player_health - rng.randf_range(5.0, 9.0))
+							_trigger_camera_shake(0.035)
+							status_label.text = "SOB FOGO!  •  %s" % str(hostile["faction"])
+						else:
+							status_label.text = "TIROS DESVIADOS"
+						hostile["aiming"] = false
+						hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
+			else:
+				hostile["aiming"] = false
+				# Sem linha de visão: aproxima-se para procurar outro ângulo.
+				var flank := _steer_around_obstacles(npc.global_position, player.global_position)
+				npc.velocity.x = flank.x * float(hostile["speed"])
+				npc.velocity.z = flank.z * float(hostile["speed"])
+				hostile["fire_timer"] = maxf(0.2, float(hostile["fire_timer"]))
 		else:
 			# Patrulha leve em torno do esconderijo quando não há ameaça próxima.
 			hostile["patrol_timer"] = float(hostile.get("patrol_timer", 0.0)) - delta
