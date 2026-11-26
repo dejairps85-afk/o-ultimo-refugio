@@ -2434,13 +2434,13 @@ func _update_infected(delta: float) -> void:
 		else:
 			player_attack_anim_time = 0.48
 			_play_best_animation(player_animation, ["attack", "punch", "hit"])
+			var forward := -player.global_transform.basis.z
 			for enemy_data in enemies:
 				if not enemy_data["alive"]:
 					continue
 				var infected: CharacterBody3D = enemy_data["node"]
 				var attack_offset := infected.global_position - player.global_position
 				var attack_distance := Vector2(attack_offset.x, attack_offset.z).length()
-				var forward := -player.global_transform.basis.z
 				var target_direction := Vector3(attack_offset.x, 0.0, attack_offset.z).normalized()
 				if attack_distance < 3.2 and forward.dot(target_direction) > 0.15:
 					enemy_data["health"] = float(enemy_data["health"]) - weapon_damage
