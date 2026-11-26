@@ -747,6 +747,8 @@ func _shop_item_action(item: Dictionary) -> void:
 		weapon_damage = float(item.get("damage", 50.0))
 	_apply_player_customization()
 	if item["kind"] == "vehicle":
+		if vehicle_active:
+			_toggle_vehicle()
 		_build_vehicle()
 	_save_profile()
 	_show_shop_category(shop_category)
