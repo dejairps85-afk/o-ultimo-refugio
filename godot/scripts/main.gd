@@ -18,6 +18,7 @@ var _touch_move := Vector2.ZERO
 var _attack_feedback_time := 0.0
 var rng := RandomNumberGenerator.new()
 var status_label: Label
+var health_bar: ProgressBar
 var enemies: Array = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
@@ -104,6 +105,17 @@ func _build_terrain() -> void:
 	mat.roughness = 1.0
 	mat.metallic = 0.0
 	mat.vertex_color_use_as_albedo = false
+	var ground_diffuse := "res://assets/textures/forest_ground_06/Diffuse_1k_jpg.jpg"
+	var ground_normal := "res://assets/textures/forest_ground_06/nor_gl_1k_jpg.jpg"
+	var ground_roughness := "res://assets/textures/forest_ground_06/Rough_1k_jpg.jpg"
+	if ResourceLoader.exists(ground_diffuse):
+		mat.albedo_texture = load(ground_diffuse) as Texture2D
+	if ResourceLoader.exists(ground_normal):
+		mat.normal_enabled = true
+		mat.normal_texture = load(ground_normal) as Texture2D
+	if ResourceLoader.exists(ground_roughness):
+		mat.roughness_texture = load(ground_roughness) as Texture2D
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	mesh.surface_set_material(0, mat)
 	var ground := MeshInstance3D.new()
 	ground.mesh = mesh
@@ -132,6 +144,7 @@ func _scatter_environment() -> void:
 	var tree_scene: PackedScene = load("res://assets/models/tree_small_02/tree_small_02_mobile.glb") if ResourceLoader.exists("res://assets/models/tree_small_02/tree_small_02_mobile.glb") else null
 	var rock_scene: PackedScene = load("res://assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb") if ResourceLoader.exists("res://assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb") else null
 	var fern_scene: PackedScene = load("res://assets/models/fern_02/fern_02_mobile.glb") if ResourceLoader.exists("res://assets/models/fern_02/fern_02_mobile.glb") else null
+	var stump_scene: PackedScene = load("res://assets/models/tree_stump_01/tree_stump_01_mobile.glb") if ResourceLoader.exists("res://assets/models/tree_stump_01/tree_stump_01_mobile.glb") else null
 	for i in range(100):
 		var x := rng.randf_range(-98, 98)
 		var z := rng.randf_range(-98, 98)
@@ -160,6 +173,16 @@ func _scatter_environment() -> void:
 		instance.position = Vector3(x, _height_at(x, z), z)
 		instance.rotation.y = rng.randf_range(0, TAU)
 		add_child(instance)
+	for i in range(7):
+		if stump_scene:
+			var x := rng.randf_range(-92, 92)
+			var z := rng.randf_range(-92, 92)
+			if Vector2(x, z).length() > 13.0:
+				var stump := stump_scene.instantiate() as Node3D
+				stump.scale = Vector3.ONE * rng.randf_range(0.7, 1.15)
+				stump.position = Vector3(x, _height_at(x, z), z)
+				stump.rotation.y = rng.randf_range(0.0, TAU)
+				add_child(stump)
 	for i in range(80):
 		var x := rng.randf_range(-95, 95)
 		var z := rng.randf_range(-95, 95)
@@ -392,6 +415,14 @@ func _build_hud() -> void:
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
 	layer.add_child(status_label)
+	health_bar = ProgressBar.new()
+	health_bar.min_value = 0
+	health_bar.max_value = 100
+	health_bar.value = player_health
+	health_bar.show_percentage = true
+	health_bar.custom_minimum_size = Vector2(210, 18)
+	health_bar.position = Vector2(22, 76)
+	layer.add_child(health_bar)
 	var hint := Label.new()
 	hint.text = "WASD: mover  •  Espaço: pular  •  F: atacar  •  Toque esquerdo: mover  •  Arraste direito: câmera"
 	hint.position = Vector2(22, 48)
@@ -488,6 +519,8 @@ func _physics_process(delta: float) -> void:
 	if player.global_position.y < ground_y - 3.0:
 		player.global_position.y = ground_y + 1.0
 		player.velocity = Vector3.ZERO
+	if health_bar:
+		health_bar.value = player_health
 	if status_label and player_health > 0.0 and _attack_feedback_time <= 0.0:
 		status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), enemies.size()]
 	if _attack_feedback_time > 0.0:
