@@ -251,10 +251,13 @@ func _build_alien_mystery() -> void:
 
 
 func _spawn_alien_guards() -> void:
-	for i in range(2):
+	for i in range(3):
+		var is_juggernaut := i == 2
 		var guard := CharacterBody3D.new()
-		guard.name = "Extraterrestrial_Sentinel_%02d" % (i + 1)
+		guard.name = "Alien_Juggernaut" if is_juggernaut else "Extraterrestrial_Sentinel_%02d" % (i + 1)
 		guard.floor_snap_length = 0.45
+		if is_juggernaut:
+			guard.scale = Vector3(1.32, 1.42, 1.32)
 		var collision := CollisionShape3D.new()
 		var capsule := CapsuleShape3D.new()
 		capsule.radius = 0.43
@@ -269,14 +272,14 @@ func _spawn_alien_guards() -> void:
 		body.mesh = body_mesh
 		body.position.y = 1.08
 		var armor := StandardMaterial3D.new()
-		armor.albedo_color = Color(0.075, 0.12, 0.15)
+		armor.albedo_color = Color(0.20, 0.075, 0.055) if is_juggernaut else Color(0.075, 0.12, 0.15)
 		armor.metallic = 0.82
 		armor.roughness = 0.24
 		body.material_override = armor
 		guard.add_child(body)
 		# Placas segmentadas de blindagem alienígena: peitoral, ombros, antebraços e grevas.
 		var plate_mat := StandardMaterial3D.new()
-		plate_mat.albedo_color = Color(0.16, 0.23, 0.27)
+		plate_mat.albedo_color = Color(0.34, 0.12, 0.075) if is_juggernaut else Color(0.16, 0.23, 0.27)
 		plate_mat.metallic = 0.96
 		plate_mat.roughness = 0.16
 		for plate_spec in [
@@ -314,9 +317,9 @@ func _spawn_alien_guards() -> void:
 		eye.position = Vector3(0, 2.18, -0.29)
 		var eye_mat := StandardMaterial3D.new()
 		eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		eye_mat.albedo_color = Color(0.12, 0.85, 1.0)
+		eye_mat.albedo_color = Color(1.0, 0.22, 0.06) if is_juggernaut else Color(0.12, 0.85, 1.0)
 		eye_mat.emission_enabled = true
-		eye_mat.emission = Color(0.08, 0.7, 1.0)
+		eye_mat.emission = Color(1.0, 0.12, 0.025) if is_juggernaut else Color(0.08, 0.7, 1.0)
 		eye_mat.emission_energy_multiplier = 2.8
 		eye.material_override = eye_mat
 		guard.add_child(eye)
@@ -327,17 +330,17 @@ func _spawn_alien_guards() -> void:
 		visor.position = Vector3(0.0, 2.22, -0.03)
 		visor.material_override = plate_mat
 		guard.add_child(visor)
-		var point := Vector2(-88.0 + (float(i) - 0.5) * 7.0, -77.0)
+		var point := Vector2(-88.0 + (float(i) - 0.5) * 7.0, -77.0 if not is_juggernaut else -69.0)
 		guard.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
 		add_child(guard)
 		var armor_label := Label3D.new()
 		armor_label.name = "AlienArmorStatus"
-		armor_label.text = "BLINDAGEM 380 | HP 520"
-		armor_label.position.y = 2.85
+		armor_label.text = "JUGGERNAUT • BLINDAGEM 650 | HP 760" if is_juggernaut else "SENTINELA • BLINDAGEM 380 | HP 520"
+		armor_label.position.y = 3.35 if is_juggernaut else 2.85
 		armor_label.font_size = 22
 		armor_label.modulate = Color(0.35, 0.85, 1.0)
 		guard.add_child(armor_label)
-		alien_guards.append({"node":guard,"health":520.0,"armor":380.0,"armor_max":380.0,"attack_timer":rng.randf_range(1.5,3.0),"aim_timer":0.0,"stagger":0.0,"alive":true,"armor_label":armor_label,"plate_material":plate_mat})
+		alien_guards.append({"node":guard,"class":"juggernaut" if is_juggernaut else "sentinel","health":760.0 if is_juggernaut else 520.0,"armor":650.0 if is_juggernaut else 380.0,"armor_max":650.0 if is_juggernaut else 380.0,"move_speed":2.05 if is_juggernaut else 3.0,"attack_damage":21.0 if is_juggernaut else 13.0,"attack_interval":3.2 if is_juggernaut else 2.5,"attack_timer":rng.randf_range(2.0,3.5),"aim_timer":0.0,"stagger":0.0,"alive":true,"armor_label":armor_label,"plate_material":plate_mat})
 
 
 func _damage_alien_guard(alien: Dictionary, raw_damage: float, weapon_id := "melee") -> void:
@@ -393,8 +396,9 @@ func _update_alien_guards(delta: float) -> void:
 			guard.velocity.z = move_toward(guard.velocity.z, 0.0, 10.0 * delta)
 		elif distance > 9.0:
 			var direction := _steer_around_obstacles(guard.global_position, player.global_position)
-			guard.velocity.x = direction.x * 3.0
-			guard.velocity.z = direction.z * 3.0
+			var alien_speed := float(data.get("move_speed", 3.0))
+			guard.velocity.x = direction.x * alien_speed
+			guard.velocity.z = direction.z * alien_speed
 			guard.rotation.y = lerp_angle(guard.rotation.y, atan2(-direction.x, -direction.z), delta * 4.0)
 		else:
 			guard.velocity.x = move_toward(guard.velocity.x, 0.0, 8.0 * delta)
@@ -403,7 +407,7 @@ func _update_alien_guards(delta: float) -> void:
 			data["attack_timer"] = float(data["attack_timer"]) - delta
 			if float(data["attack_timer"]) <= 0.0:
 				data["aim_timer"] = 0.58
-				data["attack_timer"] = 2.5
+				data["attack_timer"] = float(data.get("attack_interval", 2.5))
 				if is_instance_valid(status_label):
 					status_label.text = "SENTINELA ALIENÍGENA MIRANDO! • PREPARE A ESQUIVA"
 		if float(data["aim_timer"]) > 0.0:
@@ -413,7 +417,7 @@ func _update_alien_guards(delta: float) -> void:
 				var finish := player.global_position + Vector3(0, 1.0, 0)
 				_spawn_alien_energy_trace(start, finish)
 				if dodge_timer <= 0.0:
-					_apply_incoming_damage(13.0, "DISPARO DE ENERGIA ALIENÍGENA")
+					_apply_incoming_damage(float(data.get("attack_damage", 13.0)), "ATAQUE DO JUGGERNAUT" if str(data.get("class", "")) == "juggernaut" else "DISPARO DE ENERGIA ALIENÍGENA")
 					_trigger_camera_shake(0.065)
 				elif is_instance_valid(status_label):
 					status_label.text = "DISPARO ALIENÍGENA DESVIADO!"
@@ -2433,11 +2437,11 @@ func _update_infected(delta: float) -> void:
 					status_label.text = "SENTINELA ATINGIDA • %d HP" % int(float(alien["health"]))
 					if float(alien["health"]) <= 0.0:
 						alien["alive"] = false
-						credits += 180
-						scrap += 5
+						credits += 320 if str(alien.get("class", "")) == "juggernaut" else 180
+						scrap += 12 if str(alien.get("class", "")) == "juggernaut" else 5
 						_save_profile()
 						alien_node.queue_free()
-						status_label.text = "SENTINELA ELIMINADA • +180 CRÉDITOS"
+						status_label.text = "JUGGERNAUT ELIMINADO • +320 CRÉDITOS" if str(alien.get("class", "")) == "juggernaut" else "SENTINELA ELIMINADA • +180 CRÉDITOS"
 			for hostile in hostile_humans:
 				if not bool(hostile["alive"]):
 					continue
