@@ -30,6 +30,8 @@ var player_animation: AnimationPlayer
 var player_health := 100.0
 var stamina := 100.0
 var sprint_enabled := false
+var crouch_enabled := false
+var crouch_button: Button
 var dodge_requested := false
 var dodge_timer := 0.0
 var dodge_cooldown := 0.0
@@ -1732,7 +1734,7 @@ func _update_hostile_factions(delta: float) -> void:
 			npc.velocity.x = push.x
 			npc.velocity.z = push.z
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
-		elif distance < 38.0 or heard_gunshot:
+		elif distance < (14.0 if crouch_enabled else 38.0) or heard_gunshot:
 			var pursuit_target := player.global_position if distance < 38.0 else gunshot_noise_position
 			var pursuit_offset := pursuit_target - npc.global_position
 			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
@@ -1874,7 +1876,8 @@ func _update_infected(delta: float) -> void:
 			infected.move_and_slide()
 			enemy_data["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
 			continue
-		var territorial_dormant := bool(enemy_data.get("territorial", false)) and distance > float(enemy_data.get("activation_radius", 44.0))
+		var infected_detection_radius := 17.0 if crouch_enabled else float(enemy_data.get("activation_radius", 44.0))
+		var territorial_dormant := distance > infected_detection_radius
 		if territorial_dormant and not heard_gunshot:
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
@@ -2252,6 +2255,19 @@ func _build_hud() -> void:
 	sprint_button.offset_bottom = -170
 	sprint_button.pressed.connect(_toggle_sprint)
 	layer.add_child(sprint_button)
+	crouch_button = Button.new()
+	crouch_button.text = "AGACHAR: OFF"
+	crouch_button.custom_minimum_size = Vector2(112, 52)
+	crouch_button.anchor_left = 1.0
+	crouch_button.anchor_right = 1.0
+	crouch_button.anchor_top = 1.0
+	crouch_button.anchor_bottom = 1.0
+	crouch_button.offset_left = -300
+	crouch_button.offset_right = -160
+	crouch_button.offset_top = -300
+	crouch_button.offset_bottom = -242
+	crouch_button.pressed.connect(_toggle_crouch)
+	layer.add_child(crouch_button)
 	var dodge_button := Button.new()
 	dodge_button.text = "ESQUIVAR"
 	dodge_button.custom_minimum_size = Vector2(118, 52)
@@ -2956,7 +2972,22 @@ func _trigger_game_over() -> void:
 	restart_button.visible = true
 	status_label.text = "FIM DE JOGO"
 
+func _toggle_crouch() -> void:
+	crouch_enabled = not crouch_enabled
+	if crouch_enabled:
+		sprint_enabled = false
+		if is_instance_valid(sprint_button):
+			sprint_button.text = "CORRER: OFF"
+	if is_instance_valid(crouch_button):
+		crouch_button.text = "AGACHAR: ON" if crouch_enabled else "AGACHAR: OFF"
+	if is_instance_valid(status_label):
+		status_label.text = "MODO FURTIVO ATIVADO" if crouch_enabled else "MODO FURTIVO DESATIVADO"
+
 func _toggle_sprint() -> void:
+	if crouch_enabled:
+		crouch_enabled = false
+		if is_instance_valid(crouch_button):
+			crouch_button.text = "AGACHAR: OFF"
 	sprint_enabled = not sprint_enabled
 	if is_instance_valid(sprint_button):
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
@@ -3033,7 +3064,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			status_label.text = "ESQUIVA INDISPONÍVEL: RECUPERE ENERGIA"
 	dodge_requested = false
-	var sprinting := sprint_enabled and moving and stamina > 0.0 and dodge_timer <= 0.0
+	var sprinting := sprint_enabled and not crouch_enabled and moving and stamina > 0.0 and dodge_timer <= 0.0
 	if sprinting:
 		stamina = maxf(0.0, stamina - 24.0 * delta)
 	elif dodge_timer <= 0.0:
@@ -3042,7 +3073,7 @@ func _physics_process(delta: float) -> void:
 		sprint_enabled = false
 		if is_instance_valid(sprint_button):
 			sprint_button.text = "CORRER: OFF"
-	var movement_speed := PLAYER_SPEED * (1.65 if sprinting else 1.0)
+	var movement_speed := PLAYER_SPEED * (1.65 if sprinting else (0.52 if crouch_enabled else 1.0))
 	if dodge_timer > 0.0:
 		dodge_timer = maxf(0.0, dodge_timer - delta)
 		player.velocity.x = dodge_direction.x * 14.0
