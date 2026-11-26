@@ -347,6 +347,8 @@ func _damage_alien_guard(alien: Dictionary, raw_damage: float, weapon_id := "mel
 	var armor_value := float(alien.get("armor", 0.0))
 	var penetration := 0.12
 	match weapon_id:
+		"weapon_tank_cannon":
+			penetration = 0.92
 		"weapon_sniper":
 			penetration = 0.48
 		"weapon_rifle":
@@ -3442,6 +3444,26 @@ func _fire_tank_cannon() -> void:
 			enemy_data["alive"] = false
 			_award_infected_kill()
 			target.queue_free()
+			eliminated += 1
+	for alien in alien_guards:
+		if not bool(alien.get("alive", false)):
+			continue
+		var alien_target := alien.get("node") as CharacterBody3D
+		if not is_instance_valid(alien_target):
+			continue
+		var alien_distance := alien_target.global_position.distance_to(impact_position)
+		if alien_distance > blast_radius + 2.0:
+			continue
+		var cannon_damage := 520.0 * (1.0 - 0.45 * alien_distance / (blast_radius + 2.0))
+		_damage_alien_guard(alien, cannon_damage, "weapon_tank_cannon")
+		alien["stagger"] = 1.0
+		if float(alien["health"]) <= 0.0:
+			alien["alive"] = false
+			var is_boss := str(alien.get("class", "")) == "juggernaut"
+			credits += 320 if is_boss else 180
+			scrap += 12 if is_boss else 5
+			_save_profile()
+			alien_target.queue_free()
 			eliminated += 1
 	for hostile in hostile_humans:
 		if not bool(hostile.get("alive", false)):
