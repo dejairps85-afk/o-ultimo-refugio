@@ -442,6 +442,64 @@ func _build_barricade() -> void:
 	_save_buildings()
 	status_label.text = "BARRICADA CONSTRUÍDA: REFÚGIO FORTIFICADO"
 
+func _try_community_construction(builder: CharacterBody3D) -> void:
+	var community_count := 0
+	for structure in built_structures:
+		if bool(structure.get("community", false)):
+			community_count += 1
+	if community_count >= 4:
+		return
+	if wood < 10 or scrap < 6:
+		if is_instance_valid(status_label) and player.global_position.distance_to(builder.global_position) < 18.0:
+			status_label.text = "DAVI PRECISA DE 10 MADEIRAS E 6 SUCATAS PARA CONSTRUIR"
+		return
+	var base_position := shelter_root.global_position if is_instance_valid(shelter_root) else Vector3(0, _height_at(0, -8), -8)
+	var offsets := [
+		{"offset": Vector3(-4.0, 0, 0), "rotation": PI * 0.5},
+		{"offset": Vector3(4.0, 0, 0), "rotation": PI * 0.5},
+		{"offset": Vector3(0, 0, -4.0), "rotation": 0.0},
+		{"offset": Vector3(0, 0, 4.0), "rotation": 0.0}
+	]
+	for item in offsets:
+		var candidate: Vector3 = base_position + item["offset"]
+		var occupied := false
+		for existing in built_structures:
+			if Vector2(float(existing["x"]) - candidate.x, float(existing["z"]) - candidate.z).length() < 2.6:
+				occupied = true
+				break
+		if occupied:
+			continue
+		wood -= 10
+		scrap -= 6
+		var rotation := float(item["rotation"])
+		_spawn_community_barricade(candidate, rotation)
+		built_structures.append({"x": candidate.x, "z": candidate.z, "rotation": rotation, "community": true})
+		_save_profile()
+		_save_buildings()
+		if is_instance_valid(status_label) and player.global_position.distance_to(builder.global_position) < 18.0:
+			status_label.text = "DAVI CONSTRUIU UMA DEFESA PARA O REFÚGIO"
+		return
+
+func _spawn_community_barricade(build_position: Vector3, rotation: float) -> void:
+	var barricade := StaticBody3D.new()
+	barricade.name = "CommunityBarricade"
+	barricade.position = Vector3(build_position.x, _height_at(build_position.x, build_position.z), build_position.z)
+	barricade.rotation.y = rotation
+	var plank := MeshInstance3D.new()
+	var plank_mesh := BoxMesh.new()
+	plank_mesh.size = Vector3(2.8, 1.25, 0.22)
+	plank.mesh = plank_mesh
+	plank.position.y = 0.68
+	plank.material_override = _make_material(Color(0.30, 0.19, 0.10))
+	barricade.add_child(plank)
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.8, 1.25, 0.28)
+	collision.shape = shape
+	collision.position.y = 0.68
+	barricade.add_child(collision)
+	add_child(barricade)
+
 func _save_buildings() -> void:
 	var config := ConfigFile.new()
 	config.set_value("world", "barricades", built_structures)
@@ -461,24 +519,7 @@ func _load_saved_buildings() -> void:
 	if shelter_level > 0:
 		_build_shelter_visual()
 	for data in built_structures:
-		var barricade := StaticBody3D.new()
-		barricade.name = "SavedBarricade"
-		barricade.position = Vector3(float(data["x"]), _height_at(float(data["x"]), float(data["z"])), float(data["z"]))
-		barricade.rotation.y = float(data["rotation"])
-		var plank := MeshInstance3D.new()
-		var plank_mesh := BoxMesh.new()
-		plank_mesh.size = Vector3(2.8, 1.25, 0.22)
-		plank.mesh = plank_mesh
-		plank.position.y = 0.68
-		plank.material_override = _make_material(Color(0.30, 0.19, 0.10))
-		barricade.add_child(plank)
-		var collision := CollisionShape3D.new()
-		var shape := BoxShape3D.new()
-		shape.size = Vector3(2.8, 1.25, 0.28)
-		collision.shape = shape
-		collision.position.y = 0.68
-		barricade.add_child(collision)
-		add_child(barricade)
+		_spawn_community_barricade(Vector3(float(data["x"]), 0, float(data["z"])), float(data["rotation"]))
 
 func _add_tree_collision(root: Node3D) -> void:
 	var body := StaticBody3D.new()
@@ -1333,7 +1374,8 @@ func _spawn_allied_survivors() -> void:
 	# Companheiros locais: IA leve, sem chamadas externas, preparada para evoluir.
 	var ally_specs := [
 		{"name": "MAYA • MÉDICA", "role": "MÉDICA", "color": Color(0.72, 0.28, 0.22), "offset": Vector3(2.8, 0, 2.2)},
-		{"name": "RAUL • PATRULHEIRO", "role": "PATRULHEIRO", "color": Color(0.22, 0.38, 0.25), "offset": Vector3(-2.8, 0, 2.2)}
+		{"name": "RAUL • PATRULHEIRO", "role": "PATRULHEIRO", "color": Color(0.22, 0.38, 0.25), "offset": Vector3(-2.8, 0, 2.2)},
+		{"name": "DAVI • CONSTRUTOR", "role": "CONSTRUTOR", "color": Color(0.42, 0.34, 0.22), "offset": Vector3(4.5, 0, -8.0)}
 	]
 	for spec in ally_specs:
 		var ally := CharacterBody3D.new()
@@ -1371,7 +1413,7 @@ func _spawn_allied_survivors() -> void:
 		role_label.modulate = Color(0.88, 0.94, 0.82)
 		ally.add_child(role_label)
 		add_child(ally)
-		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "scavenge_timer": 6.0, "heal_timer": 8.0, "combat_timer": 0.0})
+		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "scavenge_timer": 6.0, "heal_timer": 8.0, "combat_timer": 0.0, "constructor_timer": 12.0})
 
 func _update_allied_survivors(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -1385,6 +1427,11 @@ func _update_allied_survivors(delta: float) -> void:
 		var desired := player.global_position + player.global_transform.basis * offset
 		var distance := Vector2(ally.global_position.x - player.global_position.x, ally.global_position.z - player.global_position.z).length()
 		var target := desired
+		var movement_distance := distance
+		if str(data["role"]) == "CONSTRUTOR":
+			var base_position := shelter_root.global_position if is_instance_valid(shelter_root) else Vector3(0, _height_at(0, -8), -8)
+			target = base_position + Vector3(4.5, 0, 0)
+			movement_distance = Vector2(ally.global_position.x - target.x, ally.global_position.z - target.z).length()
 		var nearest_enemy: Dictionary = {}
 		var nearest_distance := 999.0
 		for enemy_data in enemies:
@@ -1410,7 +1457,7 @@ func _update_allied_survivors(delta: float) -> void:
 					threat.queue_free()
 		else:
 			data["state"] = "FOLLOW"
-		if distance > 2.4:
+		if movement_distance > (1.8 if str(data["role"]) == "CONSTRUTOR" else 2.4):
 			var move_dir := Vector3(target.x - ally.global_position.x, 0, target.z - ally.global_position.z).normalized()
 			move_dir = _steer_around_obstacles(ally.global_position, ally.global_position + move_dir * 3.0)
 			ally.velocity.x = move_dir.x * 4.2
@@ -1426,7 +1473,7 @@ func _update_allied_survivors(delta: float) -> void:
 			ally.velocity.y = 0.0
 		ally.move_and_slide()
 		data["scavenge_timer"] = maxf(0.0, float(data["scavenge_timer"]) - delta)
-		if float(data["scavenge_timer"]) <= 0.0 and distance < 24.0:
+		if str(data["role"]) != "CONSTRUTOR" and float(data["scavenge_timer"]) <= 0.0 and distance < 24.0:
 			for resource_index in range(resource_nodes.size()):
 				var resource_data: Dictionary = resource_nodes[resource_index]
 				var resource_node := resource_data["node"] as Node3D
@@ -1441,6 +1488,11 @@ func _update_allied_survivors(delta: float) -> void:
 					data["scavenge_timer"] = 9.0
 					_save_profile()
 					break
+		if str(data["role"]) == "CONSTRUTOR":
+			data["constructor_timer"] = maxf(0.0, float(data["constructor_timer"]) - delta)
+			if movement_distance < 3.0 and float(data["constructor_timer"]) <= 0.0:
+				_try_community_construction(ally)
+				data["constructor_timer"] = 35.0
 		if str(data["role"]) == "MÉDICA":
 			data["heal_timer"] = maxf(0.0, float(data["heal_timer"]) - delta)
 			if player_health < 90.0 and food > 0 and float(data["heal_timer"]) <= 0.0 and player.global_position.distance_to(ally.global_position) < 7.0:
