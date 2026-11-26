@@ -442,6 +442,35 @@ func _build_barricade() -> void:
 	_save_buildings()
 	status_label.text = "BARRICADA CONSTRUÍDA: REFÚGIO FORTIFICADO"
 
+func _community_scavenge_from_base() -> void:
+	var base_position := shelter_root.global_position if is_instance_valid(shelter_root) else Vector3(0, _height_at(0, -8), -8)
+	var nearest_index := -1
+	var nearest_distance := 22.0
+	for index in range(resource_nodes.size()):
+		var data: Dictionary = resource_nodes[index]
+		var node := data["node"] as Node3D
+		if not is_instance_valid(node):
+			continue
+		var distance := Vector2(node.global_position.x - base_position.x, node.global_position.z - base_position.z).length()
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest_index = index
+	if nearest_index < 0:
+		return
+	var found: Dictionary = resource_nodes[nearest_index]
+	var amount := int(found["amount"])
+	match str(found["kind"]):
+		"wood": wood += amount
+		"scrap": scrap += amount
+		"food": food += amount
+	var resource_node := found["node"] as Node3D
+	if is_instance_valid(resource_node):
+		resource_node.queue_free()
+	resource_nodes.remove_at(nearest_index)
+	_save_profile()
+	if is_instance_valid(status_label) and is_instance_valid(player) and player.global_position.distance_to(base_position) < 18.0:
+		status_label.text = "DAVI RECOLHEU %d DE %s PARA A COMUNIDADE" % [amount, str(found["kind"]).to_upper()]
+
 func _try_community_construction(builder: CharacterBody3D) -> void:
 	var community_count := 0
 	for structure in built_structures:
@@ -1413,7 +1442,7 @@ func _spawn_allied_survivors() -> void:
 		role_label.modulate = Color(0.88, 0.94, 0.82)
 		ally.add_child(role_label)
 		add_child(ally)
-		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "scavenge_timer": 6.0, "heal_timer": 8.0, "combat_timer": 0.0, "constructor_timer": 12.0})
+		allied_survivors.append({"body": ally, "role": spec["role"], "home_offset": spec["offset"], "state": "FOLLOW", "scavenge_timer": 6.0, "heal_timer": 8.0, "combat_timer": 0.0, "constructor_timer": 12.0, "community_scavenge_timer": 20.0})
 
 func _update_allied_survivors(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -1490,6 +1519,10 @@ func _update_allied_survivors(delta: float) -> void:
 					break
 		if str(data["role"]) == "CONSTRUTOR":
 			data["constructor_timer"] = maxf(0.0, float(data["constructor_timer"]) - delta)
+			data["community_scavenge_timer"] = maxf(0.0, float(data["community_scavenge_timer"]) - delta)
+			if movement_distance < 3.0 and float(data["community_scavenge_timer"]) <= 0.0:
+				_community_scavenge_from_base()
+				data["community_scavenge_timer"] = 24.0
 			if movement_distance < 3.0 and float(data["constructor_timer"]) <= 0.0:
 				_try_community_construction(ally)
 				data["constructor_timer"] = 35.0
