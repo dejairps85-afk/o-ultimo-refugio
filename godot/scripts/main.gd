@@ -18,6 +18,10 @@ var _touch_move := Vector2.ZERO
 var _attack_feedback_time := 0.0
 var rng := RandomNumberGenerator.new()
 var status_label: Label
+var enemies: Array = []
+var player_animation: AnimationPlayer
+var player_health := 100.0
+var player_attack_cooldown := 0.0
 
 func _ready() -> void:
 	rng.randomize()
@@ -25,6 +29,7 @@ func _ready() -> void:
 	_build_terrain()
 	_scatter_environment()
 	_build_player()
+	_spawn_infected()
 	_build_hud()
 
 func _setup_environment() -> void:
@@ -218,41 +223,76 @@ func _procedural_fern() -> Node3D:
 		root.add_child(leaf)
 	return root
 
+func _find_animation_player(node: Node) -> AnimationPlayer:
+	if node is AnimationPlayer:
+		return node as AnimationPlayer
+	for child in node.get_children():
+		var found := _find_animation_player(child)
+		if found:
+			return found
+	return null
+
+func _play_best_animation(anim: AnimationPlayer, keywords: Array[String]) -> void:
+	if not anim:
+		return
+	var names := anim.get_animation_list()
+	for keyword in keywords:
+		for animation_name in names:
+			if keyword in animation_name.to_lower():
+				anim.play(animation_name)
+				return
+	if not names.is_empty():
+		anim.play(names[0])
+
 func _build_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Survivor"
-	player.position = Vector3(0, _height_at(0, 0) + 1.1, 0)
-	player.floor_snap_length = 0.35
+	player.position = Vector3(0, _height_at(0, 0) + 1.05, 0)
+	player.floor_snap_length = 0.45
 	var collision := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
-	capsule.radius = 0.38
-	capsule.height = 1.8
+	capsule.radius = 0.36
+	capsule.height = 1.85
 	collision.shape = capsule
-	collision.position.y = 0.9
+	collision.position.y = 0.92
 	player.add_child(collision)
-	var body := MeshInstance3D.new()
-	var body_mesh := CapsuleMesh.new()
-	body_mesh.radius = 0.36
-	body_mesh.height = 1.25
-	body.mesh = body_mesh
-	body.position.y = 1.0
-	body.material_override = _make_material(Color(0.18, 0.22, 0.18))
-	player.add_child(body)
-	var head := MeshInstance3D.new()
-	var head_mesh := SphereMesh.new()
-	head_mesh.radius = 0.23
-	head_mesh.height = 0.46
-	head.mesh = head_mesh
-	head.position.y = 1.82
-	head.material_override = _make_material(Color(0.55, 0.39, 0.27))
-	player.add_child(head)
-	var pack := MeshInstance3D.new()
-	var pack_mesh := BoxMesh.new()
-	pack_mesh.size = Vector3(0.48, 0.62, 0.24)
-	pack.mesh = pack_mesh
-	pack.position = Vector3(0, 1.08, 0.31)
-	pack.material_override = _make_material(Color(0.12, 0.16, 0.12))
-	player.add_child(pack)
+
+	var survivor_path := "res://assets/models/player/survivor-soldier.glb"
+	if ResourceLoader.exists(survivor_path):
+		var survivor_scene := load(survivor_path) as PackedScene
+		if survivor_scene:
+			var visual := survivor_scene.instantiate() as Node3D
+			visual.name = "SurvivorVisual"
+			player.add_child(visual)
+			visual.position.y = -0.92
+			visual.scale = Vector3.ONE
+			player_animation = _find_animation_player(visual)
+			_play_best_animation(player_animation, ["idle", "breath", "stand"])
+	else:
+		var body := MeshInstance3D.new()
+		var body_mesh := CapsuleMesh.new()
+		body_mesh.radius = 0.36
+		body_mesh.height = 1.25
+		body.mesh = body_mesh
+		body.position.y = 1.0
+		body.material_override = _make_material(Color(0.18, 0.22, 0.18))
+		player.add_child(body)
+		var head := MeshInstance3D.new()
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.23
+		head_mesh.height = 0.46
+		head.mesh = head_mesh
+		head.position.y = 1.82
+		head.material_override = _make_material(Color(0.55, 0.39, 0.27))
+		player.add_child(head)
+		var pack := MeshInstance3D.new()
+		var pack_mesh := BoxMesh.new()
+		pack_mesh.size = Vector3(0.48, 0.62, 0.24)
+		pack.mesh = pack_mesh
+		pack.position = Vector3(0, 1.08, 0.31)
+		pack.material_override = _make_material(Color(0.12, 0.16, 0.12))
+		player.add_child(pack)
+
 	add_child(player)
 	camera_pivot = Node3D.new()
 	camera_pivot.position = Vector3(0, 1.55, 0)
@@ -263,11 +303,75 @@ func _build_player() -> void:
 	camera.current = true
 	camera_pivot.add_child(camera)
 
+func _spawn_infected() -> void:
+	var variants := [
+		"res://assets/models/infected/zombie-walker.glb",
+		"res://assets/models/infected/zombie-runner.glb",
+		"res://assets/models/infected/zombie-brute.glb"
+	]
+	for i in range(7):
+		var variant_path: String = variants[i % variants.size()]
+		if not ResourceLoader.exists(variant_path):
+			continue
+		var packed := load(variant_path) as PackedScene
+		if not packed:
+			continue
+		var enemy := Node3D.new()
+		enemy.name = "Infected_%02d" % i
+		var visual := packed.instantiate() as Node3D
+		enemy.add_child(visual)
+		visual.scale = Vector3.ONE
+		var angle := rng.randf_range(0.0, TAU)
+		var distance := rng.randf_range(22.0, 38.0)
+		enemy.position = Vector3(cos(angle) * distance, _height_at(cos(angle) * distance, sin(angle) * distance), sin(angle) * distance)
+		enemy.rotation.y = rng.randf_range(0.0, TAU)
+		add_child(enemy)
+		var animator := _find_animation_player(visual)
+		_play_best_animation(animator, ["idle", "walk", "move"])
+		enemies.append({"node": enemy, "anim": animator, "health": 100.0, "speed": rng.randf_range(1.0, 1.8), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
+
+func _update_infected(delta: float) -> void:
+	for enemy_data in enemies:
+		if not enemy_data["alive"]:
+			continue
+		var infected: Node3D = enemy_data["node"]
+		if not is_instance_valid(infected):
+			continue
+		var to_player := player.global_position - infected.global_position
+		var distance := Vector2(to_player.x, to_player.z).length()
+		if distance > 1.35:
+			var direction := Vector3(to_player.x, 0.0, to_player.z).normalized()
+			infected.position.x += direction.x * float(enemy_data["speed"]) * delta
+			infected.position.z += direction.z * float(enemy_data["speed"]) * delta
+			infected.rotation.y = lerp_angle(infected.rotation.y, atan2(-direction.x, -direction.z), delta * 3.0)
+			infected.position.y = _height_at(infected.position.x, infected.position.z)
+			_play_best_animation(enemy_data["anim"], ["walk", "run", "move"])
+		else:
+			enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
+			if float(enemy_data["attack_timer"]) <= 0.0:
+				player_health = maxf(0.0, player_health - 7.0)
+				enemy_data["attack_timer"] = 1.25
+				status_label.text = "ALERTA: VOCE FOI ATACADO"
+	if player_attack_cooldown > 0.0:
+		player_attack_cooldown -= delta
+	if attack_requested and player_attack_cooldown <= 0.0:
+		player_attack_cooldown = 0.65
+		_play_best_animation(player_animation, ["attack", "punch", "hit"])
+		for enemy_data in enemies:
+			if not enemy_data["alive"]:
+				continue
+			var infected: Node3D = enemy_data["node"]
+			if player.global_position.distance_to(infected.global_position) < 3.2:
+				enemy_data["health"] = float(enemy_data["health"]) - 50.0
+				if float(enemy_data["health"]) <= 0.0:
+					enemy_data["alive"] = false
+					infected.queue_free()
+
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	status_label = Label.new()
-	status_label.text = "O ÚLTIMO REFÚGIO  |  PROTÓTIPO GODOT 4"
+	status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA 100%  |  INFECTADOS"
 	status_label.position = Vector2(22, 18)
 	status_label.add_theme_font_size_override("font_size", 18)
 	status_label.add_theme_color_override("font_color", Color(0.88, 0.91, 0.78))
@@ -356,7 +460,9 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y -= 19.0 * delta
 	elif jump_requested or Input.is_action_just_pressed("jump"):
 		player.velocity.y = JUMP_VELOCITY
-	if attack_requested or Input.is_action_just_pressed("attack"):
+	attack_requested = attack_requested or Input.is_action_just_pressed("attack")
+	_update_infected(delta)
+	if attack_requested:
 		status_label.text = "O ÚLTIMO REFÚGIO  |  ATAQUE"
 		_attack_feedback_time = 0.45
 	attack_requested = false
@@ -366,6 +472,8 @@ func _physics_process(delta: float) -> void:
 	if player.global_position.y < ground_y - 3.0:
 		player.global_position.y = ground_y + 1.0
 		player.velocity = Vector3.ZERO
+	if status_label and player_health > 0.0 and _attack_feedback_time <= 0.0:
+		status_label.text = "O ÚLTIMO REFÚGIO  |  VIDA %d%%  |  INFECTADOS %d" % [int(player_health), enemies.size()]
 	if _attack_feedback_time > 0.0:
 		_attack_feedback_time -= delta
 		if _attack_feedback_time <= 0.0 and is_instance_valid(status_label):
