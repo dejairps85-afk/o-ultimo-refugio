@@ -55,15 +55,21 @@ jobs:
           main_url = descriptor["url"]
           main_name = pathlib.Path(urllib.parse.urlparse(main_url).path).name or "tree_small_02.gltf"
           download(main_url, base / main_name)
-          includes = descriptor.get("include", [])
+          includes = descriptor.get("include", {})
+          downloaded = []
           if isinstance(includes, dict):
-              includes = list(includes.values())
-          for item in includes:
+              entries = includes.items()
+          elif isinstance(includes, list):
+              entries = [(None, item) for item in includes]
+          else:
+              entries = []
+          for include_path, item in entries:
               if isinstance(item, str):
-                  url, rel = item, pathlib.Path(urllib.parse.urlparse(item).path).name
+                  url = item
+                  rel = include_path or pathlib.Path(urllib.parse.urlparse(url).path).name
               elif isinstance(item, dict):
                   url = item.get("url")
-                  rel = item.get("file") or item.get("name") or pathlib.Path(urllib.parse.urlparse(url or "").path).name
+                  rel = include_path or item.get("file") or item.get("name") or pathlib.Path(urllib.parse.urlparse(url or "").path).name
               else:
                   continue
               if not url:
@@ -71,7 +77,23 @@ jobs:
               rel_path = pathlib.PurePosixPath(str(rel))
               if rel_path.is_absolute() or ".." in rel_path.parts:
                   raise SystemExit("Caminho de dependencia inseguro")
-              download(url, base.joinpath(*rel_path.parts))
+              target = base.joinpath(*rel_path.parts)
+              download(url, target)
+              downloaded.append(str(rel_path))
+          gltf_path = base / main_name
+          gltf_data = json.loads(gltf_path.read_text())
+          referenced = []
+          for section in ("images", "buffers"):
+              for entry in gltf_data.get(section, []):
+                  uri = entry.get("uri")
+                  if uri and not uri.startswith(("data:", "http://", "https://")):
+                      referenced.append(uri)
+          missing = [uri for uri in referenced if not (base / pathlib.PurePosixPath(uri)).is_file()]
+          if missing:
+              raise SystemExit("Dependencias referenciadas no encontradas: " + ", ".join(missing))
+          print(f"GLTF principal: {gltf_path}")
+          print(f"Dependencias baixadas: {len(downloaded)}")
+          print(f"Dependencias referenciadas verificadas: {len(referenced)}")
           gltf_files = list(base.glob("*.gltf"))
           if len(gltf_files) != 1:
               raise SystemExit(f"Esperado 1 arquivo glTF principal; encontrados {len(gltf_files)}")
