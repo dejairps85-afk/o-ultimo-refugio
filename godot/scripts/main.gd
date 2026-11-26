@@ -2610,6 +2610,7 @@ func _load_profile() -> void:
 		medical_supplies = int(config.get_value("profile", "medical_supplies", 0))
 		rifle_ammo = int(config.get_value("profile", "rifle_ammo", 30))
 		rifle_reserve = int(config.get_value("profile", "rifle_reserve", 120))
+		tank_shells = int(config.get_value("profile", "tank_shells", 20))
 		shelter_level = int(config.get_value("profile", "shelter_level", 0))
 		looted_poi_ids = config.get_value("profile", "looted_poi_ids", looted_poi_ids)
 
@@ -2626,6 +2627,7 @@ func _save_profile() -> void:
 	config.set_value("profile", "medical_supplies", medical_supplies)
 	config.set_value("profile", "rifle_ammo", rifle_ammo)
 	config.set_value("profile", "rifle_reserve", rifle_reserve)
+	config.set_value("profile", "tank_shells", tank_shells)
 	config.set_value("profile", "shelter_level", shelter_level)
 	config.set_value("profile", "looted_poi_ids", looted_poi_ids)
 	config.save("user://survivor_profile.cfg")
@@ -3012,6 +3014,7 @@ func _fire_tank_cannon() -> void:
 		return
 	tank_shells -= 1
 	tank_fire_cooldown = 3.2
+	_save_profile()
 	var origin := vehicle.global_position + Vector3.UP * 2.35 - vehicle.global_transform.basis.z * 3.0
 	var direction := -vehicle.global_transform.basis.z
 	var target_point := origin + direction * 68.0
