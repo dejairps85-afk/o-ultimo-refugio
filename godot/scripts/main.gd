@@ -80,6 +80,7 @@ var alien_wreck: Node3D
 var alien_story_found := false
 var alien_flight_phase := 0.0
 var alien_story_label: Label
+var alien_guards: Array[Dictionary] = []
 
 var accessory_visual: Node3D
 var outfit_tint := Color.WHITE
@@ -138,6 +139,7 @@ func _ready() -> void:
 	_build_hud()
 	_spawn_weapon_pickups()
 	_build_alien_mystery()
+	_spawn_alien_guards()
 
 
 func _build_alien_mystery() -> void:
@@ -248,7 +250,131 @@ func _build_alien_mystery() -> void:
 		marker.text = "SINAL DECODIFICADO • NÃO ESTAMOS SOZINHOS"
 
 
-func _update_alien_event(delta: float) -> void:
+func _spawn_alien_guards() -> void:
+	for i in range(2):
+		var guard := CharacterBody3D.new()
+		guard.name = "Extraterrestrial_Sentinel_%02d" % (i + 1)
+		guard.floor_snap_length = 0.45
+		var collision := CollisionShape3D.new()
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = 0.43
+		capsule.height = 2.15
+		collision.shape = capsule
+		collision.position.y = 1.08
+		guard.add_child(collision)
+		var body := MeshInstance3D.new()
+		var body_mesh := CapsuleMesh.new()
+		body_mesh.radius = 0.42
+		body_mesh.height = 1.72
+		body.mesh = body_mesh
+		body.position.y = 1.08
+		var armor := StandardMaterial3D.new()
+		armor.albedo_color = Color(0.075, 0.12, 0.15)
+		armor.metallic = 0.82
+		armor.roughness = 0.24
+		body.material_override = armor
+		guard.add_child(body)
+		var head := MeshInstance3D.new()
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.34
+		head_mesh.height = 0.68
+		head.mesh = head_mesh
+		head.position.y = 2.12
+		var skin := StandardMaterial3D.new()
+		skin.albedo_color = Color(0.18, 0.48, 0.49)
+		skin.metallic = 0.35
+		skin.emission_enabled = true
+		skin.emission = Color(0.02, 0.16, 0.17)
+		head.material_override = skin
+		guard.add_child(head)
+		var eye := MeshInstance3D.new()
+		var eye_mesh := BoxMesh.new()
+		eye_mesh.size = Vector3(0.42, 0.09, 0.08)
+		eye.mesh = eye_mesh
+		eye.position = Vector3(0, 2.18, -0.29)
+		var eye_mat := StandardMaterial3D.new()
+		eye_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		eye_mat.albedo_color = Color(0.12, 0.85, 1.0)
+		eye_mat.emission_enabled = true
+		eye_mat.emission = Color(0.08, 0.7, 1.0)
+		eye_mat.emission_energy_multiplier = 2.8
+		eye.material_override = eye_mat
+		guard.add_child(eye)
+		var point := Vector2(-88.0 + (float(i) - 0.5) * 7.0, -77.0)
+		guard.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
+		add_child(guard)
+		alien_guards.append({"node":guard,"health":260.0,"attack_timer":rng.randf_range(1.5,3.0),"aim_timer":0.0,"stagger":0.0,"alive":true})
+
+
+func _update_alien_guards(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	for data in alien_guards:
+		if not bool(data["alive"]):
+			continue
+		var guard := data["node"] as CharacterBody3D
+		if not is_instance_valid(guard):
+			continue
+		var offset := player.global_position - guard.global_position
+		var distance := Vector2(offset.x, offset.z).length()
+		if distance > 42.0:
+			continue
+		if float(data["stagger"]) > 0.0:
+			data["stagger"] = maxf(0.0, float(data["stagger"]) - delta)
+			guard.velocity.x = move_toward(guard.velocity.x, 0.0, 10.0 * delta)
+			guard.velocity.z = move_toward(guard.velocity.z, 0.0, 10.0 * delta)
+		elif distance > 9.0:
+			var direction := _steer_around_obstacles(guard.global_position, player.global_position)
+			guard.velocity.x = direction.x * 3.0
+			guard.velocity.z = direction.z * 3.0
+			guard.rotation.y = lerp_angle(guard.rotation.y, atan2(-direction.x, -direction.z), delta * 4.0)
+		else:
+			guard.velocity.x = move_toward(guard.velocity.x, 0.0, 8.0 * delta)
+			guard.velocity.z = move_toward(guard.velocity.z, 0.0, 8.0 * delta)
+			guard.rotation.y = lerp_angle(guard.rotation.y, atan2(-offset.x, -offset.z), delta * 5.0)
+			data["attack_timer"] = float(data["attack_timer"]) - delta
+			if float(data["attack_timer"]) <= 0.0:
+				data["aim_timer"] = 0.58
+				data["attack_timer"] = 2.5
+				if is_instance_valid(status_label):
+					status_label.text = "SENTINELA ALIENÍGENA MIRANDO! • PREPARE A ESQUIVA"
+		if float(data["aim_timer"]) > 0.0:
+			data["aim_timer"] = maxf(0.0, float(data["aim_timer"]) - delta)
+			if float(data["aim_timer"]) <= 0.0 and distance < 34.0:
+				var start := guard.global_position + Vector3(0, 1.65, 0)
+				var finish := player.global_position + Vector3(0, 1.0, 0)
+				_spawn_alien_energy_trace(start, finish)
+				if dodge_timer <= 0.0:
+					_apply_incoming_damage(13.0, "DISPARO DE ENERGIA ALIENÍGENA")
+					_trigger_camera_shake(0.065)
+				elif is_instance_valid(status_label):
+					status_label.text = "DISPARO ALIENÍGENA DESVIADO!"
+		if guard.is_on_floor():
+			guard.velocity.y = 0.0
+		else:
+			guard.velocity.y -= 19.0 * delta
+		guard.move_and_slide()
+
+
+func _spawn_alien_energy_trace(from_pos: Vector3, to_pos: Vector3) -> void:
+	var beam := MeshInstance3D.new()
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3(0.13, 0.13, maxf(0.1, from_pos.distance_to(to_pos)))
+	beam.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.albedo_color = Color(0.08, 0.72, 1.0)
+	material.emission_enabled = true
+	material.emission = Color(0.04, 0.62, 1.0)
+	material.emission_energy_multiplier = 3.5
+	beam.material_override = material
+	add_child(beam)
+	beam.global_position = (from_pos + to_pos) * 0.5
+	beam.look_at(to_pos, Vector3.UP)
+	get_tree().create_timer(0.14).timeout.connect(beam.queue_free)
+
+
+func _update_alien_event(delta: float) -> void
 	if not is_instance_valid(alien_ufo):
 		return
 	alien_flight_phase += delta * 0.11
@@ -2223,6 +2349,27 @@ func _update_infected(delta: float) -> void:
 						if rng.randf() < 0.12:
 							_drop_weapon_pickup(infected.global_position, "weapon_pistol")
 						infected.queue_free()
+			for alien in alien_guards:
+				if not bool(alien["alive"]):
+					continue
+				var alien_node := alien["node"] as CharacterBody3D
+				if not is_instance_valid(alien_node):
+					continue
+				var alien_offset := alien_node.global_position - player.global_position
+				var alien_distance := Vector2(alien_offset.x, alien_offset.z).length()
+				var alien_direction := Vector3(alien_offset.x, 0.0, alien_offset.z).normalized()
+				if alien_distance < 3.5 and forward.dot(alien_direction) > 0.15:
+					alien["health"] = float(alien["health"]) - weapon_damage
+					alien["stagger"] = 0.25
+					_trigger_camera_shake(0.05)
+					status_label.text = "SENTINELA ATINGIDA • %d HP" % int(float(alien["health"]))
+					if float(alien["health"]) <= 0.0:
+						alien["alive"] = false
+						credits += 180
+						scrap += 5
+						_save_profile()
+						alien_node.queue_free()
+						status_label.text = "SENTINELA ELIMINADA • +180 CRÉDITOS"
 			for hostile in hostile_humans:
 				if not bool(hostile["alive"]):
 					continue
@@ -3524,6 +3671,7 @@ func _toggle_sprint() -> void:
 
 func _physics_process(delta: float) -> void:
 	_update_alien_event(delta)
+	_update_alien_guards(delta)
 	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
 	movement_noise_timer = maxf(0.0, movement_noise_timer - delta)
 	footstep_noise_cooldown = maxf(0.0, footstep_noise_cooldown - delta)
