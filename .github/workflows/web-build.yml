@@ -53,6 +53,11 @@ jobs:
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
 
+      - name: Selecionar renderer compatível com navegadores
+        run: |
+          sed -i 's#renderer/rendering_method="mobile"#renderer/rendering_method="gl_compatibility"#' project.godot
+          grep -q 'renderer/rendering_method="gl_compatibility"' project.godot
+
       - name: Exportar versão Web
         run: |
           mkdir -p build/web
