@@ -331,7 +331,7 @@ func _spawn_wildlife() -> void:
 				leg.material_override = _make_material(animal_color.darkened(0.25), 0.95)
 				animal.add_child(leg)
 		add_child(animal)
-		wildlife.append({"node": animal, "kind": kind, "speed": 3.8 if kind == "JAVALI" else 5.4 if kind == "CERVO" else 2.8, "timer": rng.randf_range(1.0, 4.0), "direction": Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()})
+		wildlife.append({"node": animal, "kind": kind, "speed": 3.8 if kind == "JAVALI" else 5.4 if kind == "CERVO" else 2.8, "timer": rng.randf_range(1.0, 4.0), "attack_timer": rng.randf_range(0.4, 1.2), "direction": Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()})
 
 func _update_wildlife(delta: float) -> void:
 	if not is_instance_valid(player):
@@ -341,9 +341,21 @@ func _update_wildlife(delta: float) -> void:
 		var animal := data["node"] as Node3D
 		if not is_instance_valid(animal):
 			continue
+		var kind := str(data["kind"])
 		var direction: Vector3 = data["direction"]
 		var distance := animal.global_position.distance_to(player.global_position)
-		if distance < 12.0:
+		var flee_radius := 15.0 if kind == "CERVO" else 9.0 if kind == "COELHO" else 0.0
+		var fleeing := distance < flee_radius
+		var charging := kind == "JAVALI" and distance < 7.0 and not boat_active
+		data["attack_timer"] = maxf(0.0, float(data.get("attack_timer", 0.0)) - delta)
+		if charging:
+			direction = Vector3(player.global_position.x - animal.global_position.x, 0, player.global_position.z - animal.global_position.z).normalized()
+			if distance < 1.65 and float(data["attack_timer"]) <= 0.0:
+				player_health = maxf(0.0, player_health - 8.0)
+				data["attack_timer"] = 1.5
+				if is_instance_valid(status_label):
+					status_label.text = "JAVALI ATACOU! AFASTE-SE OU REVIDE"
+		elif fleeing:
 			direction = Vector3(animal.global_position.x - player.global_position.x, 0, animal.global_position.z - player.global_position.z).normalized()
 			data["timer"] = 2.0
 		else:
@@ -351,7 +363,8 @@ func _update_wildlife(delta: float) -> void:
 			if float(data["timer"]) <= 0.0:
 				direction = Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()
 				data["timer"] = rng.randf_range(2.0, 5.0)
-		var speed := float(data["speed"]) * (1.55 if distance < 12.0 else 0.35)
+		var speed_factor := 1.8 if charging else 1.65 if fleeing else 0.35
+		var speed := float(data["speed"]) * speed_factor
 		animal.position.x += direction.x * speed * delta
 		animal.position.z += direction.z * speed * delta
 		animal.position.x = clampf(animal.position.x, -100.0, 100.0)
@@ -1129,11 +1142,13 @@ func _update_infected(delta: float) -> void:
 			var animal_distance := Vector2(animal_offset.x, animal_offset.z).length()
 			var animal_direction := Vector3(animal_offset.x, 0.0, animal_offset.z).normalized()
 			if animal_distance < 3.0 and forward.dot(animal_direction) > 0.0:
-				food += 2 if str(animal_data["kind"]) == "JAVALI" else 1
+				var hunted_kind := str(animal_data["kind"])
+				var meat_amount := 3 if hunted_kind == "JAVALI" else 2 if hunted_kind == "CERVO" else 1
+				food += meat_amount
 				animal.queue_free()
 				wildlife.remove_at(wildlife_index)
 				_save_profile()
-				status_label.text = "CAÇA: CARNE ADICIONADA AO ESTOQUE"
+				status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
 
 func _award_infected_kill() -> void:
 	credits += 15
