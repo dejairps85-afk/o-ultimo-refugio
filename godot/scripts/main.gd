@@ -619,17 +619,50 @@ func _build_abandoned_town() -> void:
 		var building := StaticBody3D.new()
 		building.name = str(spec["n"]).replace(" ", "_")
 		building.position = Vector3(building_position.x, ground_y + dimensions.y * 0.5, building_position.z)
-		var shell := MeshInstance3D.new()
-		var shell_mesh := BoxMesh.new()
-		shell_mesh.size = dimensions
-		shell.mesh = shell_mesh
-		shell.material_override = _make_material(spec["c"], 0.92)
-		building.add_child(shell)
-		var collision := CollisionShape3D.new()
-		var collision_shape := BoxShape3D.new()
-		collision_shape.size = dimensions
-		collision.shape = collision_shape
-		building.add_child(collision)
+		var is_explorable := str(spec["n"]) in ["CLÍNICA", "MERCADO", "DELEGACIA"]
+		var wall_material := _make_material(spec["c"], 0.92)
+		if is_explorable:
+			var floor_mesh := BoxMesh.new()
+			floor_mesh.size = Vector3(dimensions.x - 0.25, 0.18, dimensions.z - 0.25)
+			var floor_visual := MeshInstance3D.new()
+			floor_visual.mesh = floor_mesh
+			floor_visual.position.y = -dimensions.y * 0.5 + 0.12
+			floor_visual.material_override = _make_material(Color(0.25, 0.24, 0.20), 0.98)
+			building.add_child(floor_visual)
+			var floor_collision := CollisionShape3D.new()
+			var floor_shape := BoxShape3D.new()
+			floor_shape.size = floor_mesh.size
+			floor_collision.shape = floor_shape
+			floor_collision.position = floor_visual.position
+			building.add_child(floor_collision)
+			var wall_height := dimensions.y - 0.65
+			var wall_y := -dimensions.y * 0.5 + wall_height * 0.5 + 0.18
+			_add_town_wall(building, Vector3(dimensions.x, wall_height, 0.24), Vector3(0.0, wall_y, dimensions.z * 0.5), wall_material)
+			_add_town_wall(building, Vector3(0.24, wall_height, dimensions.z), Vector3(-dimensions.x * 0.5, wall_y, 0.0), wall_material)
+			_add_town_wall(building, Vector3(0.24, wall_height, dimensions.z), Vector3(dimensions.x * 0.5, wall_y, 0.0), wall_material)
+			var doorway_width := 2.25
+			var front_segment := (dimensions.x - doorway_width) * 0.5
+			for side in [-1.0, 1.0]:
+				_add_town_wall(building, Vector3(front_segment, wall_height, 0.24), Vector3(side * (doorway_width * 0.5 + front_segment * 0.5), wall_y, -dimensions.z * 0.5), wall_material)
+			var lintel := MeshInstance3D.new()
+			var lintel_mesh := BoxMesh.new()
+			lintel_mesh.size = Vector3(doorway_width, 0.35, 0.28)
+			lintel.mesh = lintel_mesh
+			lintel.position = Vector3(0.0, wall_y + wall_height * 0.5 - 0.12, -dimensions.z * 0.5)
+			lintel.material_override = wall_material
+			building.add_child(lintel)
+		else:
+			var shell := MeshInstance3D.new()
+			var shell_mesh := BoxMesh.new()
+			shell_mesh.size = dimensions
+			shell.mesh = shell_mesh
+			shell.material_override = wall_material
+			building.add_child(shell)
+			var collision := CollisionShape3D.new()
+			var collision_shape := BoxShape3D.new()
+			collision_shape.size = dimensions
+			collision.shape = collision_shape
+			building.add_child(collision)
 		var roof := MeshInstance3D.new()
 		var roof_mesh := BoxMesh.new()
 		roof_mesh.size = Vector3(dimensions.x + 0.5, 0.28, dimensions.z + 0.5)
@@ -646,6 +679,10 @@ func _build_abandoned_town() -> void:
 			window.material_override = _make_material(Color(0.10, 0.17, 0.18), 0.25)
 			building.add_child(window)
 		town.add_child(building)
+		if is_explorable:
+			var cache_id := "east_" + str(spec["n"]).to_lower().replace("í", "i")
+			var cache_position := Vector3(center.x + building_position.x, ground_y, center.y + building_position.z)
+			_add_town_loot_cache(cache_id, str(spec["n"]), cache_position)
 		var sign := Label3D.new()
 		sign.text = str(spec["n"])
 		sign.position = Vector3(building_position.x, ground_y + dimensions.y + 1.5, building_position.z)
@@ -687,6 +724,46 @@ func _build_abandoned_town() -> void:
 	town_label.font_size = 38
 	town_label.modulate = Color(0.88, 0.48, 0.34)
 	town.add_child(town_label)
+
+
+func _add_town_wall(parent: StaticBody3D, wall_size: Vector3, wall_position: Vector3, material: Material) -> void:
+	var wall_mesh := BoxMesh.new()
+	wall_mesh.size = wall_size
+	var wall_visual := MeshInstance3D.new()
+	wall_visual.mesh = wall_mesh
+	wall_visual.position = wall_position
+	wall_visual.material_override = material
+	parent.add_child(wall_visual)
+	var wall_collision := CollisionShape3D.new()
+	var wall_shape := BoxShape3D.new()
+	wall_shape.size = wall_size
+	wall_collision.shape = wall_shape
+	wall_collision.position = wall_position
+	parent.add_child(wall_collision)
+
+func _add_town_loot_cache(cache_id: String, building_name: String, world_position: Vector3) -> void:
+	var cache := Node3D.new()
+	cache.name = "LootCache_" + cache_id
+	cache.position = world_position + Vector3(0.0, 0.05, 0.0)
+	var chest := MeshInstance3D.new()
+	var chest_mesh := BoxMesh.new()
+	chest_mesh.size = Vector3(0.95, 0.68, 0.72)
+	chest.mesh = chest_mesh
+	chest.position.y = 0.38
+	chest.material_override = _make_material(Color(0.31, 0.22, 0.13), 0.7)
+	cache.add_child(chest)
+	var lid := MeshInstance3D.new()
+	var lid_mesh := BoxMesh.new()
+	lid_mesh.size = Vector3(1.0, 0.12, 0.76)
+	lid.mesh = lid_mesh
+	lid.position.y = 0.76
+	lid.material_override = _make_material(Color(0.42, 0.32, 0.19), 0.58)
+	cache.add_child(lid)
+	add_child(cache)
+	if cache_id in looted_poi_ids:
+		cache.visible = false
+	poi_cache_nodes.append({"id": cache_id, "name": "SUPRIMENTOS: " + building_name, "node": cache})
+
 
 func _spawn_points_of_interest() -> void:
 	var locations := [
