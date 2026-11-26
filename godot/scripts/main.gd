@@ -735,6 +735,14 @@ func _build_abandoned_town() -> void:
 			bulb_material.emission_energy_multiplier = 1.4
 			bulb.material_override = bulb_material
 			lamp.add_child(bulb)
+			if (lamp_x == 0.0 and absf(lamp_z) > 1.0) or (lamp_z == 0.0 and absf(lamp_x) > 1.0):
+				var street_light := OmniLight3D.new()
+				street_light.position = Vector3(0.0, 4.35, 0.0)
+				street_light.light_color = Color(1.0, 0.66, 0.36)
+				street_light.light_energy = 0.55
+				street_light.omni_range = 10.0
+				street_light.shadow_enabled = false
+				lamp.add_child(street_light)
 			town.add_child(lamp)
 	_add_abandoned_vehicle(town, Vector3(-7.0, _height_at(center.x - 7.0, center.y - 27.0), -27.0), -0.18)
 	_add_abandoned_vehicle(town, Vector3(8.0, _height_at(center.x + 8.0, center.y + 27.0), 27.0), 2.85)
@@ -751,6 +759,37 @@ func _build_abandoned_town() -> void:
 		debris.rotation.y = rng.randf_range(-0.8, 0.8)
 		debris.material_override = _make_material(Color(0.25, 0.24, 0.20), 0.98)
 		town.add_child(debris)
+	var road_marking_material := _make_material(Color(0.62, 0.52, 0.30), 0.98)
+	for mark in range(-22, 23, 4):
+		var center_line := MeshInstance3D.new()
+		var center_line_mesh := BoxMesh.new()
+		center_line_mesh.size = Vector3(1.8, 0.025, 0.10)
+		center_line.mesh = center_line_mesh
+		center_line.position = Vector3(float(mark), road_x.position.y + 0.085, 0.0)
+		center_line.material_override = road_marking_material
+		town.add_child(center_line)
+		var cross_line := MeshInstance3D.new()
+		var cross_line_mesh := BoxMesh.new()
+		cross_line_mesh.size = Vector3(0.10, 0.025, 1.8)
+		cross_line.mesh = cross_line_mesh
+		cross_line.position = Vector3(0.0, road_x.position.y + 0.085, float(mark))
+		cross_line.material_override = road_marking_material
+		town.add_child(cross_line)
+	for side in [-1.0, 1.0]:
+		var sidewalk := MeshInstance3D.new()
+		var sidewalk_mesh := BoxMesh.new()
+		sidewalk_mesh.size = Vector3(50.0, 0.16, 1.05)
+		sidewalk.mesh = sidewalk_mesh
+		sidewalk.position = Vector3(0.0, road_x.position.y + 0.02, side * 3.2)
+		sidewalk.material_override = curb_material
+		town.add_child(sidewalk)
+		var vertical_walk := MeshInstance3D.new()
+		var vertical_mesh := BoxMesh.new()
+		vertical_mesh.size = Vector3(1.05, 0.16, 50.0)
+		vertical_walk.mesh = vertical_mesh
+		vertical_walk.position = Vector3(side * 3.2, road_x.position.y + 0.02, 0.0)
+		vertical_walk.material_override = curb_material
+		town.add_child(vertical_walk)
 	var town_label := Label3D.new()
 	town_label.text = "DISTRITO LESTE  •  ZONA DE RISCO"
 	town_label.position = Vector3(0.0, 5.0, -27.0)
