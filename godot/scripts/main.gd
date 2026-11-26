@@ -651,6 +651,23 @@ func _build_abandoned_town() -> void:
 			lintel.position = Vector3(0.0, wall_y + wall_height * 0.5 - 0.12, -dimensions.z * 0.5)
 			lintel.material_override = wall_material
 			building.add_child(lintel)
+			var divider_width := dimensions.x * 0.52
+			_add_town_wall(building, Vector3(divider_width, wall_height * 0.72, 0.18), Vector3(-dimensions.x * 0.16, wall_y - 0.12, dimensions.z * 0.12), _make_material(Color(0.29, 0.27, 0.22), 0.98))
+			var interior_light := OmniLight3D.new()
+			interior_light.position = Vector3(0.0, dimensions.y * 0.5 - 0.65, 0.0)
+			interior_light.light_color = Color(0.82, 0.72, 0.48)
+			interior_light.light_energy = 0.48
+			interior_light.omni_range = 8.5
+			building.add_child(interior_light)
+			if str(spec["n"]) == "CLÍNICA":
+				_add_town_furniture(building, Vector3(2.5, 0.72, 0.85), Vector3(-2.8, -dimensions.y * 0.5 + 0.55, 1.6), Color(0.63, 0.64, 0.58))
+				_add_town_furniture(building, Vector3(1.7, 0.95, 0.65), Vector3(2.8, -dimensions.y * 0.5 + 0.65, 1.8), Color(0.34, 0.43, 0.40))
+			elif str(spec["n"]) == "MERCADO":
+				for shelf_x in [-3.6, 0.0, 3.6]:
+					_add_town_furniture(building, Vector3(0.72, 1.65, 2.5), Vector3(shelf_x, -dimensions.y * 0.5 + 0.95, 1.0), Color(0.35, 0.25, 0.15))
+			else:
+				_add_town_furniture(building, Vector3(2.2, 0.82, 1.0), Vector3(-2.4, -dimensions.y * 0.5 + 0.62, 1.4), Color(0.22, 0.24, 0.23))
+				_add_town_furniture(building, Vector3(1.0, 1.2, 0.45), Vector3(2.8, -dimensions.y * 0.5 + 0.8, 1.7), Color(0.28, 0.30, 0.31))
 		else:
 			var shell := MeshInstance3D.new()
 			var shell_mesh := BoxMesh.new()
@@ -718,12 +735,85 @@ func _build_abandoned_town() -> void:
 			bulb.material_override = bulb_material
 			lamp.add_child(bulb)
 			town.add_child(lamp)
+	_add_abandoned_vehicle(town, Vector3(-7.0, _height_at(center.x - 7.0, center.y - 27.0) - _height_at(center.x, center.y), -27.0), -0.18)
+	_add_abandoned_vehicle(town, Vector3(8.0, _height_at(center.x + 8.0, center.y + 27.0) - _height_at(center.x, center.y), 27.0), 2.85)
+	for debris_data in [
+		{"p": Vector3(-25.0, 0.25, -7.0), "s": Vector3(1.4, 0.5, 0.8)},
+		{"p": Vector3(25.0, 0.18, 8.0), "s": Vector3(1.0, 0.36, 1.1)},
+		{"p": Vector3(-8.0, 0.2, 25.0), "s": Vector3(1.6, 0.4, 0.65)}
+	]:
+		var debris := MeshInstance3D.new()
+		var debris_mesh := BoxMesh.new()
+		debris_mesh.size = debris_data["s"]
+		debris.mesh = debris_mesh
+		debris.position = debris_data["p"]
+		debris.rotation.y = rng.randf_range(-0.8, 0.8)
+		debris.material_override = _make_material(Color(0.25, 0.24, 0.20), 0.98)
+		town.add_child(debris)
 	var town_label := Label3D.new()
 	town_label.text = "DISTRITO LESTE  •  ZONA DE RISCO"
 	town_label.position = Vector3(0.0, 5.0, -27.0)
 	town_label.font_size = 38
 	town_label.modulate = Color(0.88, 0.48, 0.34)
 	town.add_child(town_label)
+
+
+
+func _add_town_furniture(parent: Node3D, item_size: Vector3, item_position: Vector3, item_color: Color) -> void:
+	var item_body := StaticBody3D.new()
+	item_body.position = item_position
+	var item_mesh := BoxMesh.new()
+	item_mesh.size = item_size
+	var item_visual := MeshInstance3D.new()
+	item_visual.mesh = item_mesh
+	item_visual.material_override = _make_material(item_color, 0.88)
+	item_body.add_child(item_visual)
+	var item_collision := CollisionShape3D.new()
+	var item_shape := BoxShape3D.new()
+	item_shape.size = item_size
+	item_collision.shape = item_shape
+	item_body.add_child(item_collision)
+	parent.add_child(item_body)
+
+func _add_abandoned_vehicle(parent: Node3D, local_position: Vector3, rotation_y: float) -> void:
+	var wreck := Node3D.new()
+	wreck.position = local_position
+	wreck.rotation.y = rotation_y
+	var body := MeshInstance3D.new()
+	var body_mesh := BoxMesh.new()
+	body_mesh.size = Vector3(2.0, 0.78, 4.1)
+	body.mesh = body_mesh
+	body.position.y = 0.72
+	body.material_override = _make_material(Color(0.20, 0.23, 0.21), 0.82)
+	wreck.add_child(body)
+	var cabin := MeshInstance3D.new()
+	var cabin_mesh := BoxMesh.new()
+	cabin_mesh.size = Vector3(1.72, 0.72, 1.9)
+	cabin.mesh = cabin_mesh
+	cabin.position = Vector3(0.0, 1.38, -0.18)
+	cabin.material_override = _make_material(Color(0.10, 0.15, 0.16), 0.28)
+	wreck.add_child(cabin)
+	for wheel_x in [-1.02, 1.02]:
+		for wheel_z in [-1.28, 1.28]:
+			var wheel := MeshInstance3D.new()
+			var wheel_mesh := CylinderMesh.new()
+			wheel_mesh.top_radius = 0.38
+			wheel_mesh.bottom_radius = 0.38
+			wheel_mesh.height = 0.22
+			wheel.mesh = wheel_mesh
+			wheel.position = Vector3(wheel_x, 0.42, wheel_z)
+			wheel.rotation.z = PI * 0.5
+			wheel.material_override = _make_material(Color(0.055, 0.06, 0.055), 0.98)
+			wreck.add_child(wheel)
+	var wreck_collision := StaticBody3D.new()
+	var wreck_shape := CollisionShape3D.new()
+	var wreck_box := BoxShape3D.new()
+	wreck_box.size = Vector3(2.05, 1.55, 4.15)
+	wreck_shape.shape = wreck_box
+	wreck_shape.position.y = 0.82
+	wreck_collision.add_child(wreck_shape)
+	wreck.add_child(wreck_collision)
+	parent.add_child(wreck)
 
 
 func _add_town_wall(parent: StaticBody3D, wall_size: Vector3, wall_position: Vector3, material: Material) -> void:
