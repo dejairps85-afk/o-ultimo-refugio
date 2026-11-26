@@ -1,27 +1,38 @@
 # O Último Refúgio — protótipo Godot 4
 
-Esta pasta inicia uma trilha nativa separada para Android/iOS. O jogo web existente permanece intacto.
+Esta é a trilha nativa separada do projeto. A versão web existente permanece preservada e não é substituída por este protótipo.
 
-## Abrir
-1. Instale Godot 4.x (versão estável).
-2. Importe a raiz do repositório (onde está `project.godot`) como projeto existente.
-3. Execute `scenes/main.tscn`.
+## Abrir no Godot
+1. Instale uma versão estável do Godot 4.
+2. Baixe ou clone o repositório.
+3. No Godot, importe a **raiz do repositório**, onde está o arquivo `project.godot`.
+4. Abra e execute `godot/scenes/main.tscn`.
 
-## Estrutura
-O arquivo `project.godot` fica na raiz do repositório para que o Godot consiga importar diretamente os modelos e texturas de `assets/`. As cenas e scripts continuam organizados em `godot/`.
+O projeto fica na raiz para que os recursos em `assets/` sejam importados como recursos nativos do Godot.
 
-## O que este primeiro marco contém
-- Mundo 3D procedural com relevo e iluminação direcional com sombras.
-- Sobrevivente humanoide GLB real, com ajuste automático aproximado de escala, colisão, gravidade, salto e movimentação.
-- Sete infectados GLB com perseguição básica e dano ao jogador; ataque do jogador causa dano próximo.
-- Barra de vida e retorno de estado.
-- Controles de teclado para desenvolvimento e controles de toque para celular.
-- Botões de pulo e ataque na interface.
-- Modelos GLB existentes do projeto (sobrevivente, infectados, árvores, rochas, samambaias e tocos), com fallback procedural para parte do cenário.
-- Texturas PBR reais de solo (albedo, normal e roughness).
+## Recursos já integrados
+- Terreno procedural com relevo, colisão e textura PBR de solo (albedo, normal e roughness).
+- Céu procedural, iluminação direcional, sombras, tonemapping e neblina atmosférica.
+- Sobrevivente 3D GLB real, com ajuste automático aproximado de altura e busca de animações.
+- Infectados GLB em três variantes (walker, runner e brute), perseguição básica, dano e sistema simples de vida.
+- Vegetação, árvores, rochas, samambaias e tocos usando modelos 3D do próprio repositório, com fallback procedural.
+- Câmera em terceira pessoa, movimentação, salto, ataque e colisão do personagem.
+- Controles de teclado para desenvolvimento e controles por toque, com botões de pulo e ataque.
+- HUD com barra de vida e contagem de infectados vivos.
 
-## Estado e limitações
-Este é um protótipo técnico inicial, não uma versão final nem um build Android/iOS. O personagem ainda usa malha provisória; animações, combate funcional, inventário, áudio, otimização por dispositivo e integração completa dos sistemas do jogo web serão etapas seguintes. Os modelos GLB do projeto web precisam ser validados no importador Godot antes de considerar o conteúdo final.
+## Melhorias recentes
+- O controle de movimento por toque agora usa um ponto de origem fixo durante o arraste, evitando que o movimento dependa apenas da velocidade do dedo.
+- As animações do sobrevivente alternam entre movimento e repouso, e a animação de ataque tem duração controlada.
+- O HUD contabiliza somente infectados vivos.
 
-## Exportação mobile
-A exportação Android exige os templates de exportação do Godot e SDK/JDK configurados. A exportação iOS requer macOS e Xcode. Nenhum custo de licença do motor é cobrado.
+## Estado real do projeto
+Este ainda é um protótipo técnico em evolução. A validação automatizada no GitHub Actions importa os recursos e executa a cena em modo headless; isso verifica erros de importação/execução, mas **não comprova a qualidade visual, o desempenho ou a jogabilidade em um aparelho**.
+
+Ainda precisam de validação visual no editor e em dispositivo: orientação e escala final dos modelos, qualidade das animações, colisões dos infectados, obstáculos/navegação, combate completo, áudio, otimização por hardware e interface adaptada a diferentes proporções de tela.
+
+## Exportação
+- Android: exige templates de exportação do Godot e Android SDK/JDK configurados.
+- iOS: exige macOS, Xcode e configuração de assinatura Apple.
+- Ainda não há APK, IPA ou build instalável publicado por este projeto.
+
+O projeto usa Godot, um motor gratuito e open-source. Nenhuma alteração desta trilha é aplicada automaticamente à branch principal.
