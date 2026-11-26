@@ -1603,7 +1603,9 @@ func _spawn_hostile_factions() -> void:
 				"node": human, "faction": str(camp["name"]), "health": float(camp["health"]),
 				"max_health": float(camp["health"]), "speed": rng.randf_range(2.0, 2.8),
 				"fire_timer": rng.randf_range(0.5, 1.8), "stagger_timer": 0.0,
-				"knockback": Vector3.ZERO, "alive": true
+				"knockback": Vector3.ZERO, "alive": true,
+				"camp_center": camp["center"], "patrol_phase": rng.randf_range(0.0, TAU),
+				"patrol_timer": rng.randf_range(1.5, 4.0), "patrol_target": human.global_position
 			})
 
 func _alive_hostile_count() -> int:
@@ -1639,7 +1641,7 @@ func _update_hostile_factions(delta: float) -> void:
 			npc.velocity.x = push.x
 			npc.velocity.z = push.z
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
-		elif distance < 34.0:
+		elif distance < 38.0:
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
 			if distance > 13.0:
 				var direction := _steer_around_obstacles(npc.global_position, player.global_position)
@@ -1663,8 +1665,25 @@ func _update_hostile_factions(delta: float) -> void:
 					status_label.text = "TIROS DESVIADOS"
 				hostile["fire_timer"] = rng.randf_range(1.4, 2.2)
 		else:
-			npc.velocity.x = move_toward(npc.velocity.x, 0.0, 6.0 * delta)
-			npc.velocity.z = move_toward(npc.velocity.z, 0.0, 6.0 * delta)
+			# Patrulha leve em torno do esconderijo quando não há ameaça próxima.
+			hostile["patrol_timer"] = float(hostile.get("patrol_timer", 0.0)) - delta
+			var camp_center: Vector2 = hostile.get("camp_center", Vector2(npc.global_position.x, npc.global_position.z))
+			var patrol_target: Vector3 = hostile.get("patrol_target", npc.global_position)
+			if float(hostile["patrol_timer"]) <= 0.0 or Vector2(npc.global_position.x - patrol_target.x, npc.global_position.z - patrol_target.z).length() < 1.4:
+				var phase := float(hostile.get("patrol_phase", 0.0)) + rng.randf_range(0.9, 2.2)
+				hostile["patrol_phase"] = phase
+				var patrol_point := camp_center + Vector2(cos(phase), sin(phase)) * rng.randf_range(3.0, 7.0)
+				patrol_target = Vector3(patrol_point.x, _height_at(patrol_point.x, patrol_point.y), patrol_point.y)
+				hostile["patrol_target"] = patrol_target
+				hostile["patrol_timer"] = rng.randf_range(3.0, 6.0)
+			var patrol_direction := _steer_around_obstacles(npc.global_position, patrol_target)
+			if Vector2(npc.global_position.x - patrol_target.x, npc.global_position.z - patrol_target.z).length() > 1.2:
+				npc.velocity.x = patrol_direction.x * 1.15
+				npc.velocity.z = patrol_direction.z * 1.15
+				npc.rotation.y = lerp_angle(npc.rotation.y, atan2(-patrol_direction.x, -patrol_direction.z), delta * 2.8)
+			else:
+				npc.velocity.x = move_toward(npc.velocity.x, 0.0, 6.0 * delta)
+				npc.velocity.z = move_toward(npc.velocity.z, 0.0, 6.0 * delta)
 		if npc.is_on_floor():
 			npc.velocity.y = 0.0
 		else:
