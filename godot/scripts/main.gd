@@ -93,6 +93,7 @@ func _ready() -> void:
 	_build_boat()
 	_build_player()
 	_spawn_infected()
+	_spawn_city_horde()
 	_spawn_allied_survivors()
 	_load_profile()
 	_load_saved_buildings()
@@ -1442,6 +1443,53 @@ func _spawn_infected(count: int = 7) -> void:
 		var difficulty := 1.0 + float(wave_number - 1) * 0.10
 		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "alive": true})
 
+
+func _spawn_city_horde() -> void:
+	var spawn_points := [
+		Vector2(57.0, -87.0), Vector2(88.0, -87.0),
+		Vector2(48.0, -66.0), Vector2(96.0, -66.0),
+		Vector2(57.0, -45.0), Vector2(88.0, -45.0)
+	]
+	var variants := [
+		"res://assets/models/infected/zombie-walker.glb",
+		"res://assets/models/infected/zombie-runner.glb",
+		"res://assets/models/infected/zombie-brute.glb"
+	]
+	for i in range(spawn_points.size()):
+		var path: String = variants[i % variants.size()]
+		if not ResourceLoader.exists(path):
+			continue
+		var packed := load(path) as PackedScene
+		if not packed:
+			continue
+		var brute := i % variants.size() == 2
+		var height := 2.15 if brute else 1.9
+		var enemy := CharacterBody3D.new()
+		enemy.name = "Town_Infected_%02d" % i
+		enemy.floor_snap_length = 0.45
+		var collision := CollisionShape3D.new()
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = 0.48 if brute else 0.34
+		capsule.height = height
+		collision.shape = capsule
+		collision.position.y = height * 0.5
+		enemy.add_child(collision)
+		var visual := packed.instantiate() as Node3D
+		enemy.add_child(visual)
+		_fit_model_height(visual, height)
+		var point: Vector2 = spawn_points[i]
+		enemy.position = Vector3(point.x, _height_at(point.x, point.y) + 0.08, point.y)
+		enemy.rotation.y = rng.randf_range(0.0, TAU)
+		add_child(enemy)
+		var animator := _find_animation_player(visual)
+		_play_best_animation(animator, ["idle", "walk", "move"])
+		enemies.append({
+			"node": enemy, "anim": animator, "health": 125.0 if brute else 100.0,
+			"speed": rng.randf_range(1.0, 1.65), "attack_timer": rng.randf_range(0.5, 1.6),
+			"alive": true, "territorial": true, "activation_radius": 44.0
+		})
+
+
 func _steer_around_obstacles(from_position: Vector3, target_position: Vector3) -> Vector3:
 	var desired := Vector3(target_position.x - from_position.x, 0.0, target_position.z - from_position.z).normalized()
 	var avoidance := Vector3.ZERO
@@ -1467,6 +1515,15 @@ func _update_infected(delta: float) -> void:
 			continue
 		var to_player := player.global_position - infected.global_position
 		var distance := Vector2(to_player.x, to_player.z).length()
+		if bool(enemy_data.get("territorial", false)) and distance > float(enemy_data.get("activation_radius", 44.0)):
+			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
+			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
+			if infected.is_on_floor():
+				infected.velocity.y = 0.0
+			else:
+				infected.velocity.y -= 19.0 * delta
+			infected.move_and_slide()
+			continue
 		if distance > 1.55:
 			var direction := _steer_around_obstacles(infected.global_position, player.global_position)
 			infected.velocity.x = direction.x * float(enemy_data["speed"])
