@@ -32,6 +32,7 @@ var stamina := 100.0
 var sprint_enabled := false
 var crouch_enabled := false
 var crouch_button: Button
+var player_visual_base_scale := Vector3.ONE
 var dodge_requested := false
 var dodge_timer := 0.0
 var dodge_cooldown := 0.0
@@ -1486,6 +1487,7 @@ func _build_player() -> void:
 			visual.name = "SurvivorVisual"
 			player.add_child(visual)
 			_fit_model_height(visual, 1.82)
+			player_visual_base_scale = visual.scale
 			player_animation = _find_animation_player(visual)
 			_play_best_animation(player_animation, ["idle", "breath", "stand"])
 	else:
@@ -2972,8 +2974,25 @@ func _trigger_game_over() -> void:
 	restart_button.visible = true
 	status_label.text = "FIM DE JOGO"
 
+func _apply_crouch_pose() -> void:
+	if not is_instance_valid(player):
+		return
+	var visual := player.get_node_or_null("SurvivorVisual") as Node3D
+	if is_instance_valid(visual):
+		visual.scale = Vector3(player_visual_base_scale.x, player_visual_base_scale.y * (0.72 if crouch_enabled else 1.0), player_visual_base_scale.z)
+	var collision := player.get_node_or_null("CollisionShape3D") as CollisionShape3D
+	if is_instance_valid(collision) and collision.shape is CapsuleShape3D:
+		var capsule := collision.shape as CapsuleShape3D
+		capsule.height = 1.38 if crouch_enabled else 1.85
+		collision.position.y = capsule.height * 0.5
+	if is_instance_valid(camera_pivot):
+		camera_pivot.position.y = 1.05 if crouch_enabled else 1.55
+	if is_instance_valid(camera):
+		camera.position.y = 1.75 if crouch_enabled else 2.15
+
 func _toggle_crouch() -> void:
 	crouch_enabled = not crouch_enabled
+	_apply_crouch_pose()
 	if crouch_enabled:
 		sprint_enabled = false
 		if is_instance_valid(sprint_button):
@@ -2986,6 +3005,7 @@ func _toggle_crouch() -> void:
 func _toggle_sprint() -> void:
 	if crouch_enabled:
 		crouch_enabled = false
+		_apply_crouch_pose()
 		if is_instance_valid(crouch_button):
 			crouch_button.text = "AGACHAR: OFF"
 	sprint_enabled = not sprint_enabled
