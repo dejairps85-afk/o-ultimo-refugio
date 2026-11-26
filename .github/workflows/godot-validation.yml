@@ -6,6 +6,8 @@ on:
       - feature/godot-mobile-prototype
     paths:
       - "godot/**"
+      - "assets/models/**"
+      - "project.godot"
       - ".github/workflows/godot-validation.yml"
   workflow_dispatch:
 
@@ -20,7 +22,7 @@ jobs:
           curl -L --fail --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
           unzip godot.zip
           chmod +x Godot_v4.4.1-stable_linux.x86_64
-      - name: Importar e validar projeto
-        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path godot --quit
+      - name: Importar e validar projeto e modelos 3D
+        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --quit
       - name: Executar cena principal em modo headless
-        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path godot --quit-after 5
+        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --quit-after 8
