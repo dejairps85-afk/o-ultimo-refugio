@@ -23,6 +23,8 @@ var status_label: Label
 var health_bar: ProgressBar
 var enemies: Array = []
 var hostile_humans: Array[Dictionary] = []
+var gunshot_noise_timer := 0.0
+var gunshot_noise_position := Vector3.ZERO
 var environment_obstacles: Array[Dictionary] = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
@@ -1697,7 +1699,7 @@ func _spawn_bullet_trace(from_pos: Vector3, to_pos: Vector3) -> void:
 	trace.look_at(to_pos, Vector3.UP)
 	get_tree().create_timer(0.09).timeout.connect(trace.queue_free)
 
-func _update_hostile_factions(delta: float) -> void:func _has_line_of_sight(shooter: CharacterBody3D, target: CharacterBody3D) -> bool:
+func _has_line_of_sight(shooter: CharacterBody3D, target: CharacterBody3D) -> bool:
 	if not is_instance_valid(shooter) or not is_instance_valid(target):
 		return false
 	var origin := shooter.global_position + Vector3(0.0, 1.28, 0.0)
@@ -1711,6 +1713,8 @@ func _update_hostile_factions(delta: float) -> void:func _has_line_of_sight(shoo
 	return hit.get("collider") == target
 
 
+
+func _update_hostile_factions(delta: float) -> void:
 	for hostile in hostile_humans:
 		if not bool(hostile["alive"]):
 			continue
@@ -1719,16 +1723,22 @@ func _update_hostile_factions(delta: float) -> void:func _has_line_of_sight(shoo
 			continue
 		var offset := player.global_position - npc.global_position
 		var distance := Vector2(offset.x, offset.z).length()
+		var noise_offset := gunshot_noise_position - npc.global_position
+		var noise_distance := Vector2(noise_offset.x, noise_offset.z).length()
+		var heard_gunshot := gunshot_noise_timer > 0.0 and noise_distance < 88.0
 		if float(hostile.get("stagger_timer", 0.0)) > 0.0:
 			hostile["stagger_timer"] = maxf(0.0, float(hostile["stagger_timer"]) - delta)
 			var push: Vector3 = hostile.get("knockback", Vector3.ZERO)
 			npc.velocity.x = push.x
 			npc.velocity.z = push.z
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
-		elif distance < 38.0:
+		elif distance < 38.0 or heard_gunshot:
+			var pursuit_target := player.global_position if distance < 38.0 else gunshot_noise_position
+			var pursuit_offset := pursuit_target - npc.global_position
+			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
-			if distance > 13.0:
-				var direction := _steer_around_obstacles(npc.global_position, player.global_position)
+			if pursuit_distance > 13.0:
+				var direction := _steer_around_obstacles(npc.global_position, pursuit_target)
 				npc.velocity.x = direction.x * float(hostile["speed"])
 				npc.velocity.z = direction.z * float(hostile["speed"])
 			else:
@@ -1961,6 +1971,8 @@ func _update_infected(delta: float) -> void:
 					status_label.text = "CAÇA: +%d COMIDA (%s)" % [meat_amount, hunted_kind]
 
 func _fire_rifle() -> void:
+	gunshot_noise_timer = 9.0
+	gunshot_noise_position = player.global_position
 	if rifle_reloading:
 		status_label.text = "RECARREGANDO..."
 		return
@@ -2943,6 +2955,7 @@ func _toggle_sprint() -> void:
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
 func _physics_process(delta: float) -> void:
+	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
 	_update_camera_feedback(delta)
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
