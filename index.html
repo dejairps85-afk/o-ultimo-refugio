@@ -354,9 +354,9 @@ try{
   loadPBRSet('eucalyptus_bark',barkMats,1,2.5);loadPBRSet('dark_rock',[rockMats[0]],1.6,1.6);loadPBRSet('rocky_terrain_02',[rockMats[1],rockMats[2]],1.6,1.6);
   const trunkGeo=new THREE.CylinderGeometry(.18,.3,1,7),pineGeo=new THREE.ConeGeometry(1,1,7),crownGeo=new THREE.IcosahedronGeometry(1,0),rockGeo=new THREE.DodecahedronGeometry(1,0),bushGeo=new THREE.IcosahedronGeometry(1,0),grassGeo=new THREE.ConeGeometry(.075,1,4);
   const grassBatches=leafMats.map(()=>[]),grassDummy=new THREE.Object3D();
-  const treeCandidates=[];
+  const treeCandidates=[],rockCandidates=[];
   function tree(x,z){const g=new THREE.Group(),scale=rand(.82,1.3),type=Math.random(),trunkHeight=rand(2.8,3.8);const trunk=new THREE.Mesh(trunkGeo,barkMats[Math.floor(Math.random()*barkMats.length)]);trunk.scale.set(scale,trunkHeight,scale);trunk.position.y=trunkHeight/2;g.add(trunk);if(type<.72){const layers=2+Math.floor(Math.random()*2);for(let k=0;k<layers;k++){const h=rand(2,2.8)*scale,r=rand(1.05,1.5)*scale;const crown=new THREE.Mesh(pineGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);crown.scale.set(r,h,r);crown.position.y=(1.55+k*.78)*scale;crown.rotation.y=rand(0,Math.PI);g.add(crown);}}else{for(let k=0;k<3;k++){const crown=new THREE.Mesh(crownGeo,leafMats[Math.floor(Math.random()*leafMats.length)]);const r=rand(.72,1.05)*scale;crown.position.set(rand(-.65,.65)*scale,rand(2.2,3.5)*scale,rand(-.65,.65)*scale);crown.scale.set(r,r*rand(.8,1.25),r);g.add(crown);}}g.position.set(x,terrainHeight(x,z),z);g.traverse(o=>{if(o.isMesh){o.castShadow=!isMobile;o.receiveShadow=!isMobile;}});scene.add(g);resources.push({obj:g,type:'wood',amount:1,rad:1.7});treeCandidates.push(g);}
-  function rock(x,z){const group=new THREE.Group();for(let i=0,n=1+Math.floor(Math.random()*2);i<n;i++){const m=new THREE.Mesh(rockGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);m.position.set(rand(-.35,.35),rand(.2,.42),rand(-.3,.3));m.scale.set(rand(.42,.78)*rand(.8,1.35),rand(.42,.78)*rand(.55,.9),rand(.42,.78)*rand(.8,1.25));m.rotation.set(rand(-.2,.2),rand(0,6),rand(-.2,.2));group.add(m);}group.position.set(x,terrainHeight(x,z),z);scene.add(group);resources.push({obj:group,type:'stone',amount:1,rad:1.5});}
+  function rock(x,z){const group=new THREE.Group();for(let i=0,n=1+Math.floor(Math.random()*2);i<n;i++){const m=new THREE.Mesh(rockGeo,rockMats[Math.floor(Math.random()*rockMats.length)]);m.position.set(rand(-.35,.35),rand(.2,.42),rand(-.3,.3));m.scale.set(rand(.42,.78)*rand(.8,1.35),rand(.42,.78)*rand(.55,.9),rand(.42,.78)*rand(.8,1.25));m.rotation.set(rand(-.2,.2),rand(0,6),rand(-.2,.2));group.add(m);}group.position.set(x,terrainHeight(x,z),z);scene.add(group);resources.push({obj:group,type:'stone',amount:1,rad:1.5});rockCandidates.push(group);}
   function bush(x,z){const group=new THREE.Group();for(let i=0;i<4;i++){const leaf=new THREE.Mesh(bushGeo,bushMats[Math.floor(Math.random()*bushMats.length)]);const r=rand(.28,.48);leaf.position.set(rand(-.48,.48),rand(.2,.55),rand(-.45,.45));leaf.scale.set(r,r*rand(.7,1.1),r);group.add(leaf);}group.position.set(x,terrainHeight(x,z),z);scene.add(group);resources.push({obj:group,type:'berries',amount:2,rad:1.5});}
   function grassTuft(x,z){const y=terrainHeight(x,z);for(let j=0;j<3;j++){const materialIndex=Math.floor(Math.random()*leafMats.length),height=rand(.35,.65);grassDummy.position.set(x+rand(-.18,.18),y+height/2,z+rand(-.18,.18));grassDummy.rotation.set(rand(-.35,.35),rand(0,Math.PI*2),0);grassDummy.scale.set(1,height,1);grassDummy.updateMatrix();grassBatches[materialIndex].push(grassDummy.matrix.clone());}}
   const worldObjectCount=isMobile?76:108,grassTuftCount=isMobile?64:105;
@@ -391,6 +391,50 @@ try{
     });
   }
   loadRealisticTreeAsset();
+  function loadRealisticRockAssets(){
+    const modelUrl=new URL('./assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb',document.baseURI).href;
+    const loader=new GLTFLoader();
+    loader.load(modelUrl,gltf=>{
+      const source=gltf.scene;
+      const variants=source.children.length>1?source.children:[source];
+      const usable=variants.filter(node=>{
+        const box=new THREE.Box3().setFromObject(node);
+        const size=box.getSize(new THREE.Vector3());
+        return Number.isFinite(size.x+size.y+size.z)&&Math.max(size.x,size.y,size.z)>.08;
+      });
+      if(!usable.length){console.warn('Conjunto de rochas sem variantes validas; mantendo rochas procedurais.');return;}
+      const candidates=[...rockCandidates].sort((a,b)=>a.position.length()-b.position.length()).slice(0,isMobile?8:16);
+      candidates.forEach((group,index)=>{
+        const variant=usable[index%usable.length];
+        const instance=variant.clone(true);
+        const bounds=new THREE.Box3().setFromObject(instance);
+        const size=bounds.getSize(new THREE.Vector3());
+        const maxDim=Math.max(size.x,size.y,size.z);
+        if(!Number.isFinite(maxDim)||maxDim<.05)return;
+        const targetSize=isMobile?1.35:1.55;
+        const scale=targetSize/maxDim;
+        const center=bounds.getCenter(new THREE.Vector3());
+        instance.scale.setScalar(scale);
+        instance.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+        instance.rotation.y=rand(0,Math.PI*2);
+        instance.traverse(node=>{
+          if(node.isMesh){
+            node.castShadow=!isMobile;
+            node.receiveShadow=!isMobile;
+            node.frustumCulled=true;
+            if(node.material){node.material=node.material.clone();node.material.roughness=Math.max(.72,node.material.roughness??.9);}
+          }
+        });
+        group.clear();
+        group.add(instance);
+        group.userData.realisticRock=true;
+      });
+      console.info('Rochas 3D realistas carregadas:',candidates.length,'variantes:',usable.length);
+    },undefined,error=>{
+      console.warn('Modelo realista de rochas indisponivel; mantendo rochas procedurais.',error);
+    });
+  }
+  loadRealisticRockAssets();
   for(let i=0;i<grassTuftCount;i++){const x=rand(-98,98),z=rand(-98,98);if(Math.hypot(x,z)>11)grassTuft(x,z);}
   for(let i=0;i<grassBatches.length;i++){const matrices=grassBatches[i];if(!matrices.length)continue;const batch=new THREE.InstancedMesh(grassGeo,leafMats[i],matrices.length);batch.instanceMatrix.setUsage(THREE.StaticDrawUsage);for(let j=0;j<matrices.length;j++)batch.setMatrixAt(j,matrices[j]);batch.instanceMatrix.needsUpdate=true;batch.frustumCulled=true;batch.castShadow=false;batch.receiveShadow=false;scene.add(batch);}
   const inv={wood:0,stone:0,berries:0};let hp=100,food=100,water=100,elapsed=0,started=false,dead=false,day=1,velY=0,isGrounded=true;
