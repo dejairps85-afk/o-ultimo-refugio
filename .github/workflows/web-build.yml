@@ -48,7 +48,13 @@ jobs:
         run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --import --quit
 
       - name: Verificar inicialização e scripts do jogo
-        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --quit-after 8
+        run: |
+          set -o pipefail
+          ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --quit-after 8 2>&1 | tee /tmp/godot-web-startup.log
+          if grep -E 'SCRIPT ERROR|ERROR:' /tmp/godot-web-startup.log; then
+            echo "A inicialização apresentou erros; publicação bloqueada."
+            exit 1
+          fi
 
       - name: Configurar GitHub Pages
         uses: actions/configure-pages@v5
