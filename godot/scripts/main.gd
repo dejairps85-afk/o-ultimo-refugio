@@ -461,10 +461,11 @@ func _update_boat(delta: float) -> void:
 	boat.position.y = _river_surface_y(next_z) + 0.16
 	boat.velocity = Vector3.ZERO
 
-func _make_material(color: Color, roughness := 0.9) -> StandardMaterial3D:
+func _make_material(color: Color, roughness := 0.9, metallic := 0.0) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.roughness = roughness
+	m.metallic = metallic
 	return m
 
 func _scatter_environment() -> void:
