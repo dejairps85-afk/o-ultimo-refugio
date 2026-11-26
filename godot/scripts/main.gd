@@ -67,12 +67,20 @@ var world_environment: WorldEnvironment
 var world_time_seconds := 420.0
 var world_day := 1
 var world_clock_label: Label
+var wildlife: Array[Dictionary] = []
+var boat: CharacterBody3D
+var boat_active := false
+var boat_toggle_button: Button
+var boat_speed := 0.0
 
 func _ready() -> void:
 	rng.randomize()
 	_setup_environment()
 	_build_terrain()
+	_build_river()
 	_scatter_environment()
+	_spawn_wildlife()
+	_build_boat()
 	_build_player()
 	_spawn_infected()
 	_spawn_allied_survivors()
@@ -116,8 +124,25 @@ func _setup_environment() -> void:
 	sun_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	add_child(sun_light)
 
-func _height_at(x: float, z: float) -> float:
+func _base_height_at(x: float, z: float) -> float:
 	return sin(x * 0.035) * 1.6 + cos(z * 0.028) * 1.25 + sin((x + z) * 0.018) * 2.0 + cos(x * 0.075) * sin(z * 0.061) * 0.55
+
+func _river_center_x(z: float) -> float:
+	return 34.0 + sin(z * 0.035) * 10.0 + sin(z * 0.012) * 5.0
+
+func _is_in_river(x: float, z: float, margin := 0.0) -> bool:
+	return absf(x - _river_center_x(z)) < 5.0 + margin
+
+func _river_surface_y(z: float) -> float:
+	return _base_height_at(_river_center_x(z), z) - 0.22
+
+func _height_at(x: float, z: float) -> float:
+	var base := _base_height_at(x, z)
+	var distance := absf(x - _river_center_x(z))
+	if distance < 5.0:
+		var depth := 1.35 * pow(1.0 - distance / 5.0, 1.7)
+		return base - depth
+	return base
 
 func _build_terrain() -> void:
 	var vertices := PackedVector3Array()
@@ -183,6 +208,196 @@ func _build_terrain() -> void:
 	body.add_child(shape)
 	add_child(body)
 
+func _build_river() -> void:
+	# Leito sinuoso esculpido no terreno; a lâmina d'água acompanha a altura natural do vale.
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var indices := PackedInt32Array()
+	var segments := 180
+	for i in range(segments + 1):
+		var z := -108.0 + 216.0 * float(i) / float(segments)
+		var center_x := _river_center_x(z)
+		var water_y := _river_surface_y(z)
+		vertices.append(Vector3(center_x - 4.15, water_y, z))
+		vertices.append(Vector3(center_x + 4.15, water_y, z))
+		normals.append(Vector3.UP)
+		normals.append(Vector3.UP)
+		uvs.append(Vector2(0.0, float(i) / 8.0))
+		uvs.append(Vector2(1.0, float(i) / 8.0))
+	for i in range(segments):
+		var a := i * 2
+		indices.append_array(PackedInt32Array([a, a + 2, a + 1, a + 1, a + 2, a + 3]))
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	var river_mesh := ArrayMesh.new()
+	river_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var water_material := StandardMaterial3D.new()
+	water_material.albedo_color = Color(0.035, 0.20, 0.25, 0.88)
+	water_material.metallic = 0.22
+	water_material.roughness = 0.16
+	water_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	water_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	water_material.shading_mode = BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	river_mesh.surface_set_material(0, water_material)
+	var water := MeshInstance3D.new()
+	water.name = "SinuousRiver"
+	water.mesh = river_mesh
+	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(water)
+
+func _spawn_wildlife() -> void:
+	var species := ["CERVO", "JAVALI", "COELHO"]
+	for i in range(12):
+		var kind: String = species[i % species.size()]
+		var x := rng.randf_range(-88.0, 88.0)
+		var z := rng.randf_range(-88.0, 88.0)
+		if Vector2(x, z).length() < 18.0 or _is_in_river(x, z, 2.0):
+			x = -42.0 + rng.randf_range(-18.0, 18.0)
+			z = rng.randf_range(-78.0, 78.0)
+		var animal := Node3D.new()
+		animal.name = "Wildlife_" + kind + "_" + str(i)
+		animal.position = Vector3(x, _height_at(x, z), z)
+		var body := MeshInstance3D.new()
+		var body_mesh := SphereMesh.new()
+		body_mesh.radius = 0.55 if kind != "COELHO" else 0.25
+		body_mesh.height = 0.72 if kind != "COELHO" else 0.38
+		body.mesh = body_mesh
+		body.position.y = 0.72 if kind != "COELHO" else 0.32
+		body.scale = Vector3(1.0, 0.78, 1.45)
+		var animal_color := Color(0.48, 0.30, 0.16) if kind == "CERVO" else Color(0.24, 0.19, 0.14) if kind == "JAVALI" else Color(0.58, 0.48, 0.38)
+		body.material_override = _make_material(animal_color, 0.92)
+		animal.add_child(body)
+		var head := MeshInstance3D.new()
+		var head_mesh := SphereMesh.new()
+		head_mesh.radius = 0.22 if kind != "COELHO" else 0.14
+		head_mesh.height = head_mesh.radius * 2.0
+		head.mesh = head_mesh
+		head.position = Vector3(0.0, 1.0 if kind != "COELHO" else 0.48, -0.62 if kind != "COELHO" else -0.30)
+		head.material_override = _make_material(animal_color.lightened(0.12), 0.9)
+		animal.add_child(head)
+		for leg_x in [-0.28, 0.28]:
+			for leg_z in [-0.34, 0.34]:
+				var leg := MeshInstance3D.new()
+				var leg_mesh := CylinderMesh.new()
+				leg_mesh.top_radius = 0.055 if kind != "COELHO" else 0.035
+				leg_mesh.bottom_radius = leg_mesh.top_radius
+				leg_mesh.height = 0.58 if kind != "COELHO" else 0.28
+				leg.mesh = leg_mesh
+				leg.position = Vector3(leg_x, 0.30 if kind != "COELHO" else 0.13, leg_z)
+				leg.material_override = _make_material(animal_color.darkened(0.25), 0.95)
+				animal.add_child(leg)
+		add_child(animal)
+		wildlife.append({"node": animal, "kind": kind, "speed": 3.8 if kind == "JAVALI" else 5.4 if kind == "CERVO" else 2.8, "timer": rng.randf_range(1.0, 4.0), "direction": Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()})
+
+func _update_wildlife(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	for i in range(wildlife.size()):
+		var data: Dictionary = wildlife[i]
+		var animal := data["node"] as Node3D
+		if not is_instance_valid(animal):
+			continue
+		var direction: Vector3 = data["direction"]
+		var distance := animal.global_position.distance_to(player.global_position)
+		if distance < 12.0:
+			direction = Vector3(animal.global_position.x - player.global_position.x, 0, animal.global_position.z - player.global_position.z).normalized()
+			data["timer"] = 2.0
+		else:
+			data["timer"] = float(data["timer"]) - delta
+			if float(data["timer"]) <= 0.0:
+				direction = Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()
+				data["timer"] = rng.randf_range(2.0, 5.0)
+		var speed := float(data["speed"]) * (1.55 if distance < 12.0 else 0.35)
+		animal.position.x += direction.x * speed * delta
+		animal.position.z += direction.z * speed * delta
+		animal.position.x = clampf(animal.position.x, -100.0, 100.0)
+		animal.position.z = clampf(animal.position.z, -100.0, 100.0)
+		if _is_in_river(animal.position.x, animal.position.z, 1.0):
+			animal.position.x += signf(animal.position.x - _river_center_x(animal.position.z)) * 2.0
+		animal.position.y = _height_at(animal.position.x, animal.position.z)
+		if direction.length() > 0.1:
+			animal.rotation.y = lerp_angle(animal.rotation.y, atan2(-direction.x, -direction.z), delta * 3.0)
+		wildlife[i] = data
+
+func _build_boat() -> void:
+	boat = CharacterBody3D.new()
+	boat.name = "RiverBoat"
+	var start_z := -28.0
+	boat.position = Vector3(_river_center_x(start_z), _river_surface_y(start_z) + 0.16, start_z)
+	var hull := MeshInstance3D.new()
+	var hull_mesh := BoxMesh.new()
+	hull_mesh.size = Vector3(1.65, 0.42, 3.8)
+	hull.mesh = hull_mesh
+	hull.position.y = 0.0
+	hull.material_override = _make_material(Color(0.30, 0.19, 0.10), 0.55)
+	boat.add_child(hull)
+	var bow := MeshInstance3D.new()
+	var bow_mesh := PrismMesh.new()
+	bow_mesh.size = Vector3(1.55, 0.38, 1.15)
+	bow.mesh = bow_mesh
+	bow.position = Vector3(0, 0.02, -2.0)
+	bow.material_override = _make_material(Color(0.36, 0.24, 0.13), 0.5)
+	boat.add_child(bow)
+	var seat := MeshInstance3D.new()
+	var seat_mesh := BoxMesh.new()
+	seat_mesh.size = Vector3(0.72, 0.14, 0.48)
+	seat.mesh = seat_mesh
+	seat.position = Vector3(0, 0.27, 0.25)
+	seat.material_override = _make_material(Color(0.12, 0.14, 0.12))
+	boat.add_child(seat)
+	add_child(boat)
+
+func _toggle_boat() -> void:
+	if not is_instance_valid(boat):
+		return
+	if not boat_active:
+		if player.global_position.distance_to(boat.global_position) > 5.0:
+			status_label.text = "APROXIME-SE DO BARCO NA MARGEM DO RIO"
+			return
+		player.collision_layer = 0
+		player.collision_mask = 0
+		player.velocity = Vector3.ZERO
+		remove_child(player)
+		boat.add_child(player)
+		player.position = Vector3(0, 0.65, 0.35)
+		var visual := player.get_node_or_null("SurvivorVisual") as Node3D
+		if visual:
+			visual.visible = true
+		boat_active = true
+		boat_toggle_button.text = "SAIR DO BARCO"
+		status_label.text = "BARCO: USE O JOYSTICK PARA NAVEGAR"
+	else:
+		boat.remove_child(player)
+		add_child(player)
+		player.global_position = boat.global_position + boat.global_transform.basis.x * 2.0 + Vector3.UP * 0.3
+		player.collision_layer = 1
+		player.collision_mask = 1
+		player.velocity = Vector3.ZERO
+		boat_active = false
+		boat_toggle_button.text = "USAR BARCO"
+		status_label.text = "VOCÊ DESEMBARCOU"
+
+func _update_boat(delta: float) -> void:
+	if not boat_active or not is_instance_valid(boat):
+		return
+	var steering := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if _touch_move.length() > 0.08:
+		steering = _touch_move
+	boat_speed = move_toward(boat_speed, -steering.y * 9.0, 8.0 * delta)
+	boat.rotation.y -= steering.x * delta * 0.9 * signf(boat_speed) if absf(boat_speed) > 0.1 else 0.0
+	var next_z := clampf(boat.position.z + (-boat_speed * cos(boat.rotation.y)) * delta, -105.0, 105.0)
+	var next_x := boat.position.x + (-boat_speed * sin(boat.rotation.y)) * delta
+	var river_x := _river_center_x(next_z)
+	boat.position.x = lerpf(next_x, river_x, 0.18)
+	boat.position.z = next_z
+	boat.position.y = _river_surface_y(next_z) + 0.16
+	boat.velocity = Vector3.ZERO
+
 func _make_material(color: Color, roughness := 0.9) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
@@ -197,7 +412,7 @@ func _scatter_environment() -> void:
 	for i in range(100):
 		var x := rng.randf_range(-98, 98)
 		var z := rng.randf_range(-98, 98)
-		if Vector2(x, z).length() < 12.0:
+		if Vector2(x, z).length() < 12.0 or _is_in_river(x, z, 2.0):
 			continue
 		var instance: Node3D
 		if tree_scene:
@@ -213,7 +428,7 @@ func _scatter_environment() -> void:
 	for i in range(42):
 		var x := rng.randf_range(-96, 96)
 		var z := rng.randf_range(-96, 96)
-		if Vector2(x, z).length() < 9.0:
+		if Vector2(x, z).length() < 9.0 or _is_in_river(x, z, 2.0):
 			continue
 		var instance: Node3D
 		if rock_scene:
@@ -230,7 +445,7 @@ func _scatter_environment() -> void:
 		if stump_scene:
 			var x := rng.randf_range(-92, 92)
 			var z := rng.randf_range(-92, 92)
-			if Vector2(x, z).length() > 13.0:
+			if Vector2(x, z).length() > 13.0 and not _is_in_river(x, z, 2.0):
 				var stump := stump_scene.instantiate() as Node3D
 				stump.scale = Vector3.ONE * rng.randf_range(0.7, 1.15)
 				stump.position = Vector3(x, _height_at(x, z), z)
@@ -241,7 +456,7 @@ func _scatter_environment() -> void:
 	for i in range(80):
 		var x := rng.randf_range(-95, 95)
 		var z := rng.randf_range(-95, 95)
-		if Vector2(x, z).length() < 7.0:
+		if Vector2(x, z).length() < 7.0 or _is_in_river(x, z, 1.5):
 			continue
 		var instance: Node3D
 		if fern_scene:
@@ -967,6 +1182,19 @@ func _build_hud() -> void:
 	hint.add_theme_font_size_override("font_size", 13)
 	hint.add_theme_color_override("font_color", Color(0.75, 0.79, 0.70))
 	layer.add_child(hint)
+	boat_toggle_button = Button.new()
+	boat_toggle_button.text = "USAR BARCO"
+	boat_toggle_button.custom_minimum_size = Vector2(132, 54)
+	boat_toggle_button.anchor_left = 1.0
+	boat_toggle_button.anchor_right = 1.0
+	boat_toggle_button.anchor_top = 1.0
+	boat_toggle_button.anchor_bottom = 1.0
+	boat_toggle_button.offset_left = -300
+	boat_toggle_button.offset_right = -160
+	boat_toggle_button.offset_top = -155
+	boat_toggle_button.offset_bottom = -95
+	boat_toggle_button.pressed.connect(_toggle_boat)
+	layer.add_child(boat_toggle_button)
 	var jump_button := Button.new()
 	jump_button.text = "PULAR"
 	jump_button.custom_minimum_size = Vector2(112, 58)
@@ -1374,7 +1602,10 @@ func _apply_player_customization() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_E:
-		_collect_nearby_resource()
+		if is_instance_valid(boat) and not boat_active and player.global_position.distance_to(boat.global_position) <= 5.0:
+			_toggle_boat()
+		else:
+			_collect_nearby_resource()
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			if event.position.x < get_viewport().get_visible_rect().size.x * 0.48 and event.position.y > get_viewport().get_visible_rect().size.y * 0.35:
@@ -1553,6 +1784,13 @@ func _physics_process(delta: float) -> void:
 	_update_wave_director(delta)
 	_update_allied_survivors(delta)
 	_update_shelter_support(delta)
+	_update_wildlife(delta)
+	if boat_active:
+		_update_boat(delta)
+		_update_infected(delta)
+		if health_bar:
+			health_bar.value = player_health
+		return
 	if vehicle_active:
 		_update_vehicle(delta)
 		_update_infected(delta)
