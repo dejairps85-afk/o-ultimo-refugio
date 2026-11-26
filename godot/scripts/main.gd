@@ -1619,9 +1619,9 @@ func _spawn_bullet_trace(from_pos: Vector3, to_pos: Vector3) -> void:
 	beam.size = Vector3(0.035, 0.035, maxf(0.1, from_pos.distance_to(to_pos)))
 	trace.mesh = beam
 	trace.material_override = _make_material(Color(1.0, 0.72, 0.32))
+	add_child(trace)
 	trace.global_position = (from_pos + to_pos) * 0.5
 	trace.look_at(to_pos, Vector3.UP)
-	add_child(trace)
 	get_tree().create_timer(0.09).timeout.connect(trace.queue_free)
 
 func _update_hostile_factions(delta: float) -> void:
@@ -2768,6 +2768,7 @@ func _physics_process(delta: float) -> void:
 	if vehicle_active:
 		_update_vehicle(delta)
 		_update_infected(delta)
+		_update_hostile_factions(delta)
 		if player_health <= 0.0:
 			_trigger_game_over()
 		if health_bar:
@@ -2829,6 +2830,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity.y = JUMP_VELOCITY
 	attack_requested = attack_requested or Input.is_action_just_pressed("attack")
 	_update_infected(delta)
+	_update_hostile_factions(delta)
 	if player_health <= 0.0:
 		_trigger_game_over()
 	if attack_requested:
