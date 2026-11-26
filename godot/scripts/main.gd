@@ -25,6 +25,10 @@ var enemies: Array = []
 var hostile_humans: Array[Dictionary] = []
 var gunshot_noise_timer := 0.0
 var gunshot_noise_position := Vector3.ZERO
+var movement_noise_timer := 0.0
+var movement_noise_position := Vector3.ZERO
+var movement_noise_radius := 0.0
+var footstep_noise_cooldown := 0.0
 var environment_obstacles: Array[Dictionary] = []
 var player_animation: AnimationPlayer
 var player_health := 100.0
@@ -1730,14 +1734,17 @@ func _update_hostile_factions(delta: float) -> void:
 		var noise_offset := gunshot_noise_position - npc.global_position
 		var noise_distance := Vector2(noise_offset.x, noise_offset.z).length()
 		var heard_gunshot := gunshot_noise_timer > 0.0 and noise_distance < 88.0
+		var foot_offset := movement_noise_position - npc.global_position
+		var foot_distance := Vector2(foot_offset.x, foot_offset.z).length()
+		var heard_footsteps := movement_noise_timer > 0.0 and foot_distance < movement_noise_radius
 		if float(hostile.get("stagger_timer", 0.0)) > 0.0:
 			hostile["stagger_timer"] = maxf(0.0, float(hostile["stagger_timer"]) - delta)
 			var push: Vector3 = hostile.get("knockback", Vector3.ZERO)
 			npc.velocity.x = push.x
 			npc.velocity.z = push.z
 			hostile["knockback"] = push.move_toward(Vector3.ZERO, 24.0 * delta)
-		elif distance < (14.0 if crouch_enabled else 38.0) or heard_gunshot:
-			var pursuit_target := player.global_position if distance < 38.0 else gunshot_noise_position
+		elif distance < (14.0 if crouch_enabled else 38.0) or heard_gunshot or heard_footsteps:
+			var pursuit_target := player.global_position if distance < (14.0 if crouch_enabled else 38.0) else gunshot_noise_position if heard_gunshot else movement_noise_position
 			var pursuit_offset := pursuit_target - npc.global_position
 			var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 			var toward := Vector3(offset.x, 0.0, offset.z).normalized()
@@ -1869,6 +1876,9 @@ func _update_infected(delta: float) -> void:
 		var noise_offset := gunshot_noise_position - infected.global_position
 		var noise_distance := Vector2(noise_offset.x, noise_offset.z).length()
 		var heard_gunshot := gunshot_noise_timer > 0.0 and noise_distance < 70.0
+		var foot_offset := movement_noise_position - infected.global_position
+		var foot_distance := Vector2(foot_offset.x, foot_offset.z).length()
+		var heard_footsteps := movement_noise_timer > 0.0 and foot_distance < movement_noise_radius
 		if float(enemy_data.get("stagger_timer", 0.0)) > 0.0:
 			enemy_data["stagger_timer"] = maxf(0.0, float(enemy_data["stagger_timer"]) - delta)
 			var push: Vector3 = enemy_data.get("knockback", Vector3.ZERO)
@@ -1880,7 +1890,7 @@ func _update_infected(delta: float) -> void:
 			continue
 		var infected_detection_radius := 17.0 if crouch_enabled else float(enemy_data.get("activation_radius", 44.0))
 		var territorial_dormant := distance > infected_detection_radius
-		if territorial_dormant and not heard_gunshot:
+		if territorial_dormant and not heard_gunshot and not heard_footsteps:
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
 			if infected.is_on_floor():
@@ -1889,7 +1899,7 @@ func _update_infected(delta: float) -> void:
 				infected.velocity.y -= 19.0 * delta
 			infected.move_and_slide()
 			continue
-		var pursuit_target := gunshot_noise_position if territorial_dormant and heard_gunshot else player.global_position
+		var pursuit_target := gunshot_noise_position if territorial_dormant and heard_gunshot else movement_noise_position if territorial_dormant and heard_footsteps else player.global_position
 		var pursuit_offset := pursuit_target - infected.global_position
 		var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 		if pursuit_distance > 1.55:
@@ -3012,8 +3022,10 @@ func _toggle_sprint() -> void:
 	if is_instance_valid(sprint_button):
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
-func _physics_process(delta: float) -> void:
+	func _physics_process(delta: float) -> void:
 	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
+	movement_noise_timer = maxf(0.0, movement_noise_timer - delta)
+	footstep_noise_cooldown = maxf(0.0, footstep_noise_cooldown - delta)
 	_update_camera_feedback(delta)
 	if collect_cooldown > 0.0:
 		collect_cooldown = maxf(0.0, collect_cooldown - delta)
@@ -3072,6 +3084,11 @@ func _physics_process(delta: float) -> void:
 	right = right.normalized()
 	var direction := (right * input_dir.x + forward * -input_dir.y).normalized()
 	var moving := direction.length() > 0.05
+	if moving and footstep_noise_cooldown <= 0.0:
+		movement_noise_position = player.global_position
+		movement_noise_radius = 7.0 if crouch_enabled else 24.0 if sprint_enabled else 13.0
+		movement_noise_timer = 1.15
+		footstep_noise_cooldown = 0.72 if crouch_enabled else 0.34 if sprint_enabled else 0.58
 	if dodge_requested:
 		if dodge_cooldown <= 0.0 and stamina >= 22.0:
 			dodge_direction = direction if moving else -player.global_transform.basis.z
