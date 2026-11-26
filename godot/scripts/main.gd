@@ -395,14 +395,25 @@ func _spawn_infected() -> void:
 		var packed := load(variant_path) as PackedScene
 		if not packed:
 			continue
-		var enemy := Node3D.new()
+		var enemy := CharacterBody3D.new()
 		enemy.name = "Infected_%02d" % i
+		enemy.floor_snap_length = 0.45
+		enemy.floor_max_angle = deg_to_rad(48.0)
+		var collision := CollisionShape3D.new()
+		var capsule := CapsuleShape3D.new()
+		capsule.radius = 0.34 if i % variants.size() != 2 else 0.48
+		capsule.height = 1.9 if i % variants.size() != 2 else 2.15
+		collision.shape = capsule
+		collision.position.y = capsule.height * 0.5
+		enemy.add_child(collision)
 		var visual := packed.instantiate() as Node3D
 		enemy.add_child(visual)
 		_fit_model_height(visual, 1.9 if i % variants.size() != 2 else 2.15)
 		var angle := rng.randf_range(0.0, TAU)
 		var distance := rng.randf_range(22.0, 38.0)
-		enemy.position = Vector3(cos(angle) * distance, _height_at(cos(angle) * distance, sin(angle) * distance), sin(angle) * distance)
+		var spawn_x := cos(angle) * distance
+		var spawn_z := sin(angle) * distance
+		enemy.position = Vector3(spawn_x, _height_at(spawn_x, spawn_z) + 0.08, spawn_z)
 		enemy.rotation.y = rng.randf_range(0.0, TAU)
 		add_child(enemy)
 		var animator := _find_animation_player(visual)
@@ -429,25 +440,31 @@ func _update_infected(delta: float) -> void:
 	for enemy_data in enemies:
 		if not enemy_data["alive"]:
 			continue
-		var infected: Node3D = enemy_data["node"]
+		var infected := enemy_data["node"] as CharacterBody3D
 		if not is_instance_valid(infected):
 			continue
 		var to_player := player.global_position - infected.global_position
 		var distance := Vector2(to_player.x, to_player.z).length()
-		if distance > 1.35:
+		if distance > 1.55:
 			var direction := _steer_around_obstacles(infected.global_position, player.global_position)
-			infected.position.x += direction.x * float(enemy_data["speed"]) * delta
-			infected.position.z += direction.z * float(enemy_data["speed"]) * delta
+			infected.velocity.x = direction.x * float(enemy_data["speed"])
+			infected.velocity.z = direction.z * float(enemy_data["speed"])
 			infected.rotation.y = lerp_angle(infected.rotation.y, atan2(-direction.x, -direction.z), delta * 3.0)
-			infected.position.y = _height_at(infected.position.x, infected.position.z)
 			_play_best_animation(enemy_data["anim"], ["walk", "run", "move"])
 		else:
+			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 7.0 * delta)
+			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 7.0 * delta)
 			_play_best_animation(enemy_data["anim"], ["attack", "bite", "idle", "stand"])
 			enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
 			if float(enemy_data["attack_timer"]) <= 0.0:
 				player_health = maxf(0.0, player_health - 7.0)
 				enemy_data["attack_timer"] = 1.25
 				status_label.text = "ALERTA: VOCE FOI ATACADO"
+		if infected.is_on_floor():
+			infected.velocity.y = 0.0
+		else:
+			infected.velocity.y -= 19.0 * delta
+		infected.move_and_slide()
 	if player_attack_cooldown > 0.0:
 		player_attack_cooldown -= delta
 	if attack_requested and player_attack_cooldown <= 0.0:
@@ -457,7 +474,7 @@ func _update_infected(delta: float) -> void:
 		for enemy_data in enemies:
 			if not enemy_data["alive"]:
 				continue
-			var infected: Node3D = enemy_data["node"]
+			var infected: CharacterBody3D = enemy_data["node"]
 			if player.global_position.distance_to(infected.global_position) < 3.2:
 				enemy_data["health"] = float(enemy_data["health"]) - 50.0
 				if float(enemy_data["health"]) <= 0.0:
