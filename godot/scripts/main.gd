@@ -557,7 +557,7 @@ func _setup_environment() -> void:
 	env.ambient_light_color = Color(0.48, 0.54, 0.48)
 	env.ambient_light_energy = 0.65
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-	env.fog_enabled = true
+	env.fog_enabled = not OS.has_feature("web")
 	env.fog_light_color = Color(0.48, 0.53, 0.46)
 	env.fog_density = 0.0048
 	env.fog_sky_affect = 0.45
@@ -568,7 +568,7 @@ func _setup_environment() -> void:
 	sun_light.rotation_degrees = Vector3(-42, -28, 0)
 	sun_light.light_color = Color(1.0, 0.88, 0.68)
 	sun_light.light_energy = 1.35
-	sun_light.shadow_enabled = true
+	sun_light.shadow_enabled = not OS.has_feature("web")
 	sun_light.directional_shadow_max_distance = 90.0
 	sun_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	add_child(sun_light)
@@ -594,25 +594,27 @@ func _height_at(x: float, z: float) -> float:
 	return base
 
 func _build_terrain() -> void:
+	# Geometria reduzida no navegador para diminuir custo de CPU e memória no iPhone.
+	var segments := 64 if OS.has_feature("web") else segments
 	var vertices := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var indices := PackedInt32Array()
 	var half := WORLD_SIZE * 0.5
-	for z in range(TERRAIN_SEGMENTS + 1):
-		for x in range(TERRAIN_SEGMENTS + 1):
-			var px := -half + WORLD_SIZE * float(x) / TERRAIN_SEGMENTS
-			var pz := -half + WORLD_SIZE * float(z) / TERRAIN_SEGMENTS
+	for z in range(segments + 1):
+		for x in range(segments + 1):
+			var px := -half + WORLD_SIZE * float(x) / segments
+			var pz := -half + WORLD_SIZE * float(z) / segments
 			vertices.append(Vector3(px, _height_at(px, pz), pz))
 			var dx := _height_at(px + 0.15, pz) - _height_at(px - 0.15, pz)
 			var dz := _height_at(px, pz + 0.15) - _height_at(px, pz - 0.15)
 			normals.append(Vector3(-dx, 0.30, -dz).normalized())
 			uvs.append(Vector2(float(x) / 8.0, float(z) / 8.0))
-	for z in range(TERRAIN_SEGMENTS):
-		for x in range(TERRAIN_SEGMENTS):
-			var a := z * (TERRAIN_SEGMENTS + 1) + x
+	for z in range(segments):
+		for x in range(segments):
+			var a := z * (segments + 1) + x
 			var b := a + 1
-			var c := a + TERRAIN_SEGMENTS + 1
+			var c := a + segments + 1
 			var d := c + 1
 			indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
 	var arrays := []
@@ -905,11 +907,16 @@ func _make_material(color: Color, roughness := 0.9, metallic := 0.0) -> Standard
 	return m
 
 func _scatter_environment() -> void:
+	# Mantém o mundo completo no desktop e reduz a densidade no navegador móvel.
+	var tree_count := 48 if OS.has_feature("web") else 100
+	var rock_count := 20 if OS.has_feature("web") else 42
+	var stump_count := 8 if OS.has_feature("web") else 18
+	var fern_count := 36 if OS.has_feature("web") else 80
 	var tree_scene: PackedScene = load("res://assets/models/tree_small_02/tree_small_02_mobile.glb") if ResourceLoader.exists("res://assets/models/tree_small_02/tree_small_02_mobile.glb") else null
 	var rock_scene: PackedScene = load("res://assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb") if ResourceLoader.exists("res://assets/models/rock_moss_set_01/rock_moss_set_01_mobile.glb") else null
 	var fern_scene: PackedScene = load("res://assets/models/fern_02/fern_02_mobile.glb") if ResourceLoader.exists("res://assets/models/fern_02/fern_02_mobile.glb") else null
 	var stump_scene: PackedScene = load("res://assets/models/tree_stump_01/tree_stump_01_mobile.glb") if ResourceLoader.exists("res://assets/models/tree_stump_01/tree_stump_01_mobile.glb") else null
-	for i in range(100):
+	for i in range(tree_count):
 		var x := rng.randf_range(-98, 98)
 		var z := rng.randf_range(-98, 98)
 		if Vector2(x, z).length() < 12.0 or _is_in_river(x, z, 2.0):
@@ -927,7 +934,7 @@ func _scatter_environment() -> void:
 		add_child(instance)
 		if i % 10 == 9:
 			await get_tree().process_frame
-	for i in range(42):
+	for i in range(rock_count):
 		var x := rng.randf_range(-96, 96)
 		var z := rng.randf_range(-96, 96)
 		if Vector2(x, z).length() < 9.0 or _is_in_river(x, z, 2.0):
@@ -945,7 +952,7 @@ func _scatter_environment() -> void:
 		add_child(instance)
 		if i % 10 == 9:
 			await get_tree().process_frame
-	for i in range(18):
+	for i in range(stump_count):
 		if stump_scene:
 			var x := rng.randf_range(-92, 92)
 			var z := rng.randf_range(-92, 92)
@@ -959,7 +966,7 @@ func _scatter_environment() -> void:
 				add_child(stump)
 				if i % 6 == 5:
 					await get_tree().process_frame
-	for i in range(80):
+	for i in range(fern_count):
 		var x := rng.randf_range(-95, 95)
 		var z := rng.randf_range(-95, 95)
 		if Vector2(x, z).length() < 7.0 or _is_in_river(x, z, 1.5):
