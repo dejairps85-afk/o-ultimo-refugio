@@ -252,6 +252,7 @@ function playCue(freq=320,duration=0.08,type='triangle'){const vol=Math.max(0,Ma
 try{
   const THREE=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
   const {GLTFLoader}=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/GLTFLoader.js');
+  const {clone:cloneSkinned}=await import('https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/SkeletonUtils.js');
   /* CINEMATIC RENDER PASS 1.0 */
   const scene=new THREE.Scene();scene.background=new THREE.Color(0x182a2b);scene.fog=new THREE.Fog(0x71827a,24,102);
   const camera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,420);
@@ -521,6 +522,62 @@ try{
   }
   function respawnInitialZombies(){while(zombies.length>0){const item=zombies.pop();scene.remove(item.obj);}for(let i=0;i<8;i++)zombie(rand(-55,55),rand(-55,55));}
   respawnInitialZombies();
+  function loadRealisticInfectedAssets(){
+    const base='./assets/models/infected/';
+    const definitions=[
+      {file:'zombie-walker.glb',weight:5},
+      {file:'zombie-runner.glb',weight:2},
+      {file:'zombie-brute.glb',weight:1}
+    ];
+    const loader=new GLTFLoader();
+    Promise.all(definitions.map(item=>loader.loadAsync(new URL(base+item.file,document.baseURI).href).then(gltf=>({item,gltf})).catch(error=>{console.warn('Infectado 3D indisponivel:',item.file,error);return null;}))).then(loaded=>{
+      const assets=loaded.filter(Boolean);
+      if(!assets.length){console.warn('Nenhum modelo de infectado carregou; mantendo os modelos de reserva.');return;}
+      let replaced=0;
+      zombies.forEach((z,index)=>{
+        const selected=assets[index%assets.length];
+        const instance=cloneSkinned(selected.gltf.scene);
+        const bounds=new THREE.Box3().setFromObject(instance);
+        const size=bounds.getSize(new THREE.Vector3());
+        if(!Number.isFinite(size.y)||size.y<.2)return;
+        const scale=1.78/size.y;
+        const center=bounds.getCenter(new THREE.Vector3());
+        instance.scale.setScalar(scale);
+        instance.position.set(-center.x*scale,-bounds.min.y*scale,-center.z*scale);
+        instance.rotation.y=Math.PI;
+        instance.traverse(node=>{
+          if(node.isMesh||node.isSkinnedMesh){
+            node.frustumCulled=false;
+            node.castShadow=!isMobile;
+            node.receiveShadow=!isMobile;
+          }
+        });
+        z.obj.clear();
+        z.obj.add(instance);
+        const mixer=new THREE.AnimationMixer(instance);
+        const actions={};
+        for(const clip of selected.gltf.animations){
+          const key=clip.name.toLowerCase();
+          if(key.includes('idle'))actions.Idle=mixer.clipAction(clip);
+          else if(key.includes('walk'))actions.Walk=mixer.clipAction(clip);
+          else if(key.includes('run'))actions.Run=mixer.clipAction(clip);
+          else if(key.includes('attack'))actions.Attack=mixer.clipAction(clip);
+          else if(key.includes('hit'))actions.Hit=mixer.clipAction(clip);
+          else if(key.includes('death'))actions.Death=mixer.clipAction(clip);
+        }
+        const initial=actions.Idle||actions.Walk||mixer.clipAction(selected.gltf.animations[0]);
+        if(initial){initial.reset().play();z.currentAction=initial;}
+        z.mixer=mixer;
+        z.actions=actions;
+        z.modelType=selected.item.file;
+        z.body=null;
+        z.limbs=[];
+        replaced++;
+      });
+      console.info('Modelos humanoides 3D rigados carregados:',replaced);
+    });
+  }
+  loadRealisticInfectedAssets();
   const msg=(s)=>{const el=document.getElementById('message');el.textContent=s;el.style.display='block';clearTimeout(msg.t);msg.t=setTimeout(()=>{el.style.display='none';},1800);};
   function updateQuestHint(){const qEl=document.getElementById('quest-text');const totalRes=inv.wood+inv.stone+inv.berries;if(food<45||water<45){qEl.textContent='Recupere fome (COMER) e sede (BEBER).';}else if(totalRes<4){qEl.textContent='Colete madeira, pedra ou frutos ao redor.';}else{qEl.textContent=`Sobreviva até o Dia 3 (Dia ${day}/3).`;}}
   function updateHud(){for(const[id,v]of[['hp',hp],['food',food],['water',water]]){document.getElementById(id).style.width=Math.max(0,Math.min(100,v))+'%';}document.getElementById('hpv').textContent=Math.ceil(hp);document.getElementById('foodv').textContent=Math.ceil(food);document.getElementById('waterv').textContent=Math.ceil(water);document.getElementById('inv').textContent=`🪵 Madeira: ${inv.wood}   🪨 Pedra: ${inv.stone}   🍓 Frutos: ${inv.berries}`;updateQuestHint();}
@@ -594,7 +651,7 @@ try{
   function gameOver(win=false){dead=true;started=false;resetJoystick();touchLayerEl.classList.remove('active');overlayEl.style.display='flex';document.querySelector('.panel').innerHTML=win?'<h2>VOCÊ SOBREVIVEU!</h2><p style="text-align:center">Três dias no mundo hostil. Este é apenas o começo da sua jornada.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">JOGAR NOVAMENTE</button></div>':'<h2>FIM DA JORNADA</h2><p style="text-align:center">Você não conseguiu sobreviver. Reúna recursos e tente novamente.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">TENTAR NOVAMENTE</button></div>';}
   refreshContinueButton();updateCompass();
   const clockEl=document.getElementById('clock');let last=performance.now();let saveTimer=0;
-  function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,0.05);last=now;if(started&&!dead){elapsed+=dt;saveTimer+=dt;food=Math.max(0,food-dt*0.16);water=Math.max(0,water-dt*0.23);if(food===0||water===0)hp-=dt*0.9;const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));const move=new THREE.Vector3();if(keys.KeyW||keys.ArrowUp)move.add(forward);if(keys.KeyS||keys.ArrowDown)move.sub(forward);if(keys.KeyD||keys.ArrowRight)move.add(right);if(keys.KeyA||keys.ArrowLeft)move.sub(right);if(Math.hypot(joyVec.x,joyVec.y)>0.08){move.addScaledVector(forward,-joyVec.y);move.addScaledVector(right,joyVec.x);}if(move.lengthSq()>0.0001){const sprinting=!!(keys.ShiftLeft||keys.ShiftRight||touchSprintHeld);const speed=sprinting?8:4.5;move.normalize().multiplyScalar(speed*dt);player.position.x=Math.max(-105,Math.min(105,player.position.x+move.x));player.position.z=Math.max(-105,Math.min(105,player.position.z+move.z));player.rotation.y=Math.atan2(-move.x,-move.z);}syncPlayerToGround();if(keys.Space&&!lastJump)triggerJump();lastJump=!!keys.Space;updatePlayerVerticalPhysics(dt);if(keys.KeyE&&!lastCollect)collect();lastCollect=!!keys.KeyE;if((keys.Enter||keys.NumpadEnter)&&!lastAttack)attack();lastAttack=!!(keys.Enter||keys.NumpadEnter);if(keys.KeyF){keys.KeyF=false;eatBerries();}if(keys.KeyR){keys.KeyR=false;drinkWater();}for(const z of zombies){const dir=new THREE.Vector3().subVectors(player.position,z.obj.position);dir.y=0;const d=dir.length();if(d>1.35){dir.normalize();z.obj.position.add(dir.multiplyScalar(dt*(elapsed%120>70?1.7:0.85)));z.obj.rotation.y=Math.atan2(-dir.x,-dir.z);}else{z.hit+=dt;if(z.hit>1.1){hp-=7;z.hit=0;}}const stride=Math.sin(elapsed*5.2+z.phase);z.limbs[0].rotation.x=stride*.48;z.limbs[1].rotation.x=-stride*.48;z.limbs[2].rotation.x=-stride*.34;z.limbs[3].rotation.x=stride*.34;z.body.rotation.z=-.08+Math.sin(elapsed*2.1+z.phase)*.035;z.obj.position.y=terrainHeight(z.obj.position.x,z.obj.position.z);}const t=(elapsed%150)/150;const night=t>0.67;const dusk=t>.56&&t<.72;const daylight=night?0:Math.max(0,Math.min(1,(.67-t)/.11));sun.intensity=night?.18:(dusk?1.15:2.65);hemi.intensity=night?.48:(dusk?.95:1.25);fillLight.intensity=night?.12:.32;sun.color.set(night?0x9bb6d2:(dusk?0xffa76b:0xffd5a0));scene.fog.color.set(night?0x182532:(dusk?0x8b6855:0x71827a));scene.fog.near=night?12:24;scene.fog.far=night?58:102;skyUniforms.night.value=night?1:0;skyUniforms.top.value.set(night?0x101c30:(dusk?0x4d4650:0x24465a));skyUniforms.horizon.value.set(night?0x273342:(dusk?0xd18a61:0xb3a58a));skyUniforms.sunDir.value.set(-.45,night?-.18:.72,.3).normalize();day=Math.floor(elapsed/150)+1;const hh=Math.floor((8+(elapsed%150)/150*24)%24);clockEl.textContent=`DIA ${day} · ${String(hh).padStart(2,'0')}:00${night?' · NOITE':''}`;if(saveTimer>=10){saveTimer=0;saveGameState();}if(elapsed>450)gameOver(true);if(hp<=0)gameOver(false);updateHud();updateCompass();}const target=new THREE.Vector3(player.position.x,player.position.y+1,player.position.z);const activeDist=charPreviewMode?3.6:camDist;const activeHeight=charPreviewMode?1.4:(3+pitch*5);const offset=new THREE.Vector3(Math.sin(yaw)*activeDist,activeHeight,Math.cos(yaw)*activeDist);camera.position.lerp(target.clone().add(offset),0.12);camera.lookAt(target);renderer.render(scene,camera);}
+  function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,0.05);last=now;if(started&&!dead){elapsed+=dt;saveTimer+=dt;food=Math.max(0,food-dt*0.16);water=Math.max(0,water-dt*0.23);if(food===0||water===0)hp-=dt*0.9;const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));const move=new THREE.Vector3();if(keys.KeyW||keys.ArrowUp)move.add(forward);if(keys.KeyS||keys.ArrowDown)move.sub(forward);if(keys.KeyD||keys.ArrowRight)move.add(right);if(keys.KeyA||keys.ArrowLeft)move.sub(right);if(Math.hypot(joyVec.x,joyVec.y)>0.08){move.addScaledVector(forward,-joyVec.y);move.addScaledVector(right,joyVec.x);}if(move.lengthSq()>0.0001){const sprinting=!!(keys.ShiftLeft||keys.ShiftRight||touchSprintHeld);const speed=sprinting?8:4.5;move.normalize().multiplyScalar(speed*dt);player.position.x=Math.max(-105,Math.min(105,player.position.x+move.x));player.position.z=Math.max(-105,Math.min(105,player.position.z+move.z));player.rotation.y=Math.atan2(-move.x,-move.z);}syncPlayerToGround();if(keys.Space&&!lastJump)triggerJump();lastJump=!!keys.Space;updatePlayerVerticalPhysics(dt);if(keys.KeyE&&!lastCollect)collect();lastCollect=!!keys.KeyE;if((keys.Enter||keys.NumpadEnter)&&!lastAttack)attack();lastAttack=!!(keys.Enter||keys.NumpadEnter);if(keys.KeyF){keys.KeyF=false;eatBerries();}if(keys.KeyR){keys.KeyR=false;drinkWater();}for(const z of zombies){const dir=new THREE.Vector3().subVectors(player.position,z.obj.position);dir.y=0;const d=dir.length();if(d>1.35){dir.normalize();z.obj.position.add(dir.multiplyScalar(dt*(elapsed%120>70?1.7:0.85)));z.obj.rotation.y=Math.atan2(-dir.x,-dir.z);}else{z.hit+=dt;if(z.hit>1.1){hp-=7;z.hit=0;}}if(z.mixer){const desired=d>1.35?(d>8?'Run':'Walk'):'Idle';const next=z.actions?.[desired]||z.actions?.Walk||z.actions?.Idle;if(next&&z.currentAction!==next){next.reset().play();if(z.currentAction&&z.currentAction!==next)next.crossFadeFrom(z.currentAction,.22,false);z.currentAction=next;}z.mixer.update(dt);}else if(z.body&&z.limbs?.length===4){const stride=Math.sin(elapsed*5.2+z.phase);z.limbs[0].rotation.x=stride*.48;z.limbs[1].rotation.x=-stride*.48;z.limbs[2].rotation.x=-stride*.34;z.limbs[3].rotation.x=stride*.34;z.body.rotation.z=-.08+Math.sin(elapsed*2.1+z.phase)*.035;}z.obj.position.y=terrainHeight(z.obj.position.x,z.obj.position.z);}const t=(elapsed%150)/150;const night=t>0.67;const dusk=t>.56&&t<.72;const daylight=night?0:Math.max(0,Math.min(1,(.67-t)/.11));sun.intensity=night?.18:(dusk?1.15:2.65);hemi.intensity=night?.48:(dusk?.95:1.25);fillLight.intensity=night?.12:.32;sun.color.set(night?0x9bb6d2:(dusk?0xffa76b:0xffd5a0));scene.fog.color.set(night?0x182532:(dusk?0x8b6855:0x71827a));scene.fog.near=night?12:24;scene.fog.far=night?58:102;skyUniforms.night.value=night?1:0;skyUniforms.top.value.set(night?0x101c30:(dusk?0x4d4650:0x24465a));skyUniforms.horizon.value.set(night?0x273342:(dusk?0xd18a61:0xb3a58a));skyUniforms.sunDir.value.set(-.45,night?-.18:.72,.3).normalize();day=Math.floor(elapsed/150)+1;const hh=Math.floor((8+(elapsed%150)/150*24)%24);clockEl.textContent=`DIA ${day} · ${String(hh).padStart(2,'0')}:00${night?' · NOITE':''}`;if(saveTimer>=10){saveTimer=0;saveGameState();}if(elapsed>450)gameOver(true);if(hp<=0)gameOver(false);updateHud();updateCompass();}const target=new THREE.Vector3(player.position.x,player.position.y+1,player.position.z);const activeDist=charPreviewMode?3.6:camDist;const activeHeight=charPreviewMode?1.4:(3+pitch*5);const offset=new THREE.Vector3(Math.sin(yaw)*activeDist,activeHeight,Math.cos(yaw)*activeDist);camera.position.lerp(target.clone().add(offset),0.12);camera.lookAt(target);renderer.render(scene,camera);}
   requestAnimationFrame(animate);
   addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
   const box=document.getElementById('debugGame');if(box)box.style.display='none';
