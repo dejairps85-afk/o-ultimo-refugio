@@ -34,6 +34,16 @@ jobs:
           unzip -q templates.tpz -d templates
           find templates -type f \( -name 'web_nothreads_release.zip' -o -name 'web_nothreads_debug.zip' \) -exec cp {} "$HOME/.local/share/godot/export_templates/4.4.1.stable/" \;
 
+      - name: Normalizar modelos 3D para compatibilidade Godot
+        run: |
+          npx --yes @gltf-transform/cli --help >/dev/null
+          while IFS= read -r -d '' file; do
+            temp="${file%.glb}.normalized.glb"
+            npx --yes @gltf-transform/cli decompress "$file" "$temp"
+            npx --yes @gltf-transform/cli dequantize "$temp" "$file"
+            rm -f "$temp"
+          done < <(find assets -type f -name '*.glb' -print0)
+
       - name: Importar recursos e validar projeto
         run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --import --quit
 
