@@ -1,0 +1,1354 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>O Último Refúgio — Survival 3D</title>
+<style>
+:root{
+  --ctrl-scale:1;
+  --ctrl-alpha:.88;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  overflow:hidden;
+  background:#101820;
+  color:#eef4ee;
+  font-family:system-ui,-apple-system,Arial,sans-serif;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-touch-callout:none;
+}
+input,select,button{
+  -webkit-user-select:auto;
+  user-select:auto;
+}
+canvas{
+  display:block;
+  touch-action:none;
+}
+
+#hud{
+  position:fixed;
+  top:max(10px,env(safe-area-inset-top));
+  left:max(10px,env(safe-area-inset-left));
+  z-index:5;
+  width:min(285px,calc(100vw - 110px));
+  background:#101b20d9;
+  border:1px solid #ffffff28;
+  border-radius:14px;
+  padding:10px 12px;
+  backdrop-filter:blur(8px);
+}
+.hud-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+h1{font-size:13px;margin:0;letter-spacing:.06em}
+.hud-menu-btn{
+  padding:5px 10px;
+  font-size:11px;
+  border-radius:8px;
+  background:#ffffff1c;
+  color:#eef4ee;
+  border:1px solid #ffffff30;
+  font-weight:700;
+  cursor:pointer;
+}
+.stat{font-size:11px;margin:5px 0 2px;display:flex;justify-content:space-between}
+.track{height:7px;background:#ffffff20;border-radius:8px;overflow:hidden}
+.fill{height:100%;width:100%;transition:width .2s}
+#inv{font-size:11px;margin-top:8px;line-height:1.5;color:#d7e3db}
+#clock{font-size:11px;color:#c5e36b;margin-top:4px;font-weight:600}
+
+#message{
+  position:fixed;
+  top:max(14px,env(safe-area-inset-top));
+  left:50%;
+  transform:translateX(-50%);
+  z-index:15;
+  background:#223127f2;
+  border:1px solid #c5e36b66;
+  color:#f4f8f4;
+  padding:9px 15px;
+  border-radius:10px;
+  display:none;
+  font-size:13px;
+  font-weight:600;
+  text-align:center;
+  max-width:85vw;
+  pointer-events:none;
+}
+#cross{
+  position:fixed;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  font-size:18px;
+  color:#ffffff70;
+  pointer-events:none;
+  z-index:4;
+}
+#hint{
+  position:fixed;
+  bottom:max(8px,env(safe-area-inset-bottom));
+  left:50%;
+  transform:translateX(-50%);
+  z-index:4;
+  background:#101b20bf;
+  border:1px solid #ffffff20;
+  border-radius:10px;
+  padding:6px 11px;
+  font-size:11px;
+  text-align:center;
+  max-width:92vw;
+  color:#d0ddd5;
+  pointer-events:none;
+}
+
+#overlay{
+  position:fixed;
+  inset:0;
+  z-index:20;
+  background:#071016eb;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:16px;
+  overflow-y:auto;
+}
+.panel{
+  width:100%;
+  max-width:520px;
+  background:#101d24f5;
+  border:1px solid #ffffff26;
+  border-radius:18px;
+  padding:20px;
+  box-shadow:0 16px 40px #00000080;
+  max-height:92vh;
+  overflow-y:auto;
+}
+.panel h2{font-size:clamp(24px,5.5vw,38px);margin:0 0 8px;text-align:center;line-height:1.1}
+.panel p{color:#c4d0ca;line-height:1.5;font-size:13px;margin:8px 0}
+.menu-list{display:flex;flex-direction:column;gap:10px;margin-top:14px}
+.menu-btn{
+  width:100%;
+  border:0;
+  border-radius:12px;
+  padding:13px 16px;
+  background:#c5e36b;
+  color:#172018;
+  font-weight:800;
+  font-size:14px;
+  cursor:pointer;
+  letter-spacing:.03em;
+}
+.menu-btn.secondary{background:#1b2d36;color:#eef4ee;border:1px solid #ffffff28}
+.menu-btn:disabled{opacity:.42;cursor:not-allowed}
+
+.subview{display:none;margin-top:12px;text-align:left}
+.subview.active{display:block}
+.field{margin-bottom:12px}
+.field label{display:flex;justify-content:space-between;font-size:12px;color:#dce7e0;margin-bottom:5px;font-weight:600}
+.field input[type="text"],.field select{
+  width:100%;
+  padding:10px 12px;
+  border-radius:10px;
+  border:1px solid #ffffff30;
+  background:#0a1318;
+  color:#eef4ee;
+  font-size:14px;
+}
+.field input[type="range"]{width:100%;accent-color:#c5e36b}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.swatch{
+  width:34px;height:34px;border-radius:50%;border:2px solid #ffffff40;cursor:pointer;padding:0;
+}
+.swatch.active{border-color:#c5e36b;transform:scale(1.1)}
+.preview-box{
+  background:#0a1419;
+  border:1px solid #ffffff22;
+  border-radius:12px;
+  padding:10px;
+  font-size:12px;
+  color:#c5e36b;
+  margin-bottom:12px;
+  text-align:center;
+}
+.controls-help{list-style:none;padding:0;margin:0;font-size:12px;line-height:1.7;color:#d6e2da}
+.controls-help li{padding:4px 0;border-bottom:1px solid #ffffff12}
+
+#touch-layer{
+  position:fixed;
+  inset:0;
+  z-index:8;
+  pointer-events:none;
+  display:none;
+}
+#touch-layer.active{display:block}
+
+#cam-zone{
+  position:fixed;
+  top:0;
+  right:0;
+  width:52vw;
+  height:100vh;
+  pointer-events:auto;
+  touch-action:none;
+}
+
+#joy-zone{
+  position:fixed;
+  left:max(14px,env(safe-area-inset-left));
+  bottom:max(14px,env(safe-area-inset-bottom));
+  width:calc(132px * var(--ctrl-scale));
+  height:calc(132px * var(--ctrl-scale));
+  border-radius:50%;
+  background:#0d181e;
+  border:2px solid #ffffff38;
+  opacity:var(--ctrl-alpha);
+  pointer-events:auto;
+  touch-action:none;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+#joy-knob{
+  width:calc(52px * var(--ctrl-scale));
+  height:calc(52px * var(--ctrl-scale));
+  border-radius:50%;
+  background:#c5e36b;
+  border:2px solid #172018;
+  transform:translate(0px,0px);
+  pointer-events:none;
+}
+
+#action-pad{
+  position:fixed;
+  right:max(12px,env(safe-area-inset-right));
+  bottom:max(12px,env(safe-area-inset-bottom));
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:calc(8px * var(--ctrl-scale));
+  pointer-events:auto;
+  touch-action:none;
+  opacity:var(--ctrl-alpha);
+  max-width:48vw;
+}
+.act-btn{
+  min-width:calc(68px * var(--ctrl-scale));
+  min-height:calc(46px * var(--ctrl-scale));
+  padding:6px 8px;
+  border-radius:12px;
+  border:1px solid #ffffff38;
+  background:#14232bcc;
+  color:#f2f7f3;
+  font-weight:800;
+  font-size:calc(11px * var(--ctrl-scale));
+  letter-spacing:.02em;
+  touch-action:none;
+  cursor:pointer;
+}
+.act-btn.primary{background:#c5e36b;color:#172018;border-color:#c5e36b}
+.act-btn.active-hold{outline:2px solid #c5e36b;background:#2a4220}
+
+#debugGame{
+  position:fixed;
+  bottom:max(8px,env(safe-area-inset-bottom));
+  right:max(8px,env(safe-area-inset-right));
+  z-index:99999;
+  background:#202b35d9;
+  color:#fff;
+  padding:8px 10px;
+  border-radius:10px;
+  font:11px monospace;
+  max-width:min(320px,90vw);
+  max-height:90px;
+  overflow:auto;
+  display:none;
+}
+@media (max-width:600px){
+  #hud{width:min(220px,calc(100vw - 24px));padding:8px 10px}
+  #hint{display:none}
+}
+</style>
+</head>
+<body>
+<div id="debugGame">DIAGNÓSTICO: carregando motor 3D...</div>
+<script>
+function reportGameError(msg) {
+  const box = document.getElementById('debugGame');
+  if (box) {
+    box.style.display = 'block';
+    box.innerHTML = '<b>ERRO NO JOGO:</b><br>' + msg;
+  }
+}
+window.addEventListener('error', e => reportGameError(e.message));
+window.addEventListener('unhandledrejection', e => reportGameError(String(e.reason)));
+</script>
+
+<div id="hud">
+  <div class="hud-top">
+    <h1 id="hud-title">O ÚLTIMO REFÚGIO <span style="color:#c5e36b">/ 0.2</span></h1>
+    <button class="hud-menu-btn" id="btn-open-menu" type="button">MENU</button>
+  </div>
+  <div class="stat"><span>VIDA</span><b id="hpv">100</b></div>
+  <div class="track"><div id="hp" class="fill" style="background:#e45e55"></div></div>
+  <div class="stat"><span>FOME</span><b id="foodv">100</b></div>
+  <div class="track"><div id="food" class="fill" style="background:#e5b34f"></div></div>
+  <div class="stat"><span>SEDE</span><b id="waterv">100</b></div>
+  <div class="track"><div id="water" class="fill" style="background:#54b9df"></div></div>
+  <div id="inv">🪵 Madeira: 0 &nbsp; 🪨 Pedra: 0 &nbsp; 🍓 Frutos: 0</div>
+  <div id="clock">DIA 1 · 08:00</div>
+</div>
+
+<div id="message"></div>
+<div id="cross">＋</div>
+<div id="hint">WASD mover · Shift correr · Espaço pular · Clique/Enter atacar · E coletar · F comer · R água · Arraste girar câmera</div>
+
+<div id="touch-layer">
+  <div id="cam-zone"></div>
+  <div id="joy-zone"><div id="joy-knob"></div></div>
+  <div id="action-pad">
+    <button class="act-btn" id="btn-run" type="button">CORRER</button>
+    <button class="act-btn" id="btn-jump" type="button">PULAR</button>
+    <button class="act-btn primary" id="btn-attack" type="button">ATACAR</button>
+    <button class="act-btn" id="btn-interact" type="button">INTERAGIR</button>
+    <button class="act-btn" id="btn-collect" type="button">COLETAR</button>
+    <button class="act-btn" id="btn-eat" type="button">COMER</button>
+    <button class="act-btn" id="btn-drink" type="button" style="grid-column:span 2">BEBER</button>
+  </div>
+</div>
+
+<div id="overlay">
+  <div class="panel">
+    <div id="view-main" class="subview active">
+      <h2>O ÚLTIMO<br><span style="color:#c5e36b">REFÚGIO</span></h2>
+      <p style="text-align:center">Reúna recursos, mantenha-se alimentado e hidratado e sobreviva aos infectados. <b>Objetivo:</b> sobreviva por 3 dias.</p>
+      <div class="menu-list">
+        <button class="menu-btn" id="btn-new-game" type="button">NOVO JOGO</button>
+        <button class="menu-btn secondary" id="btn-continue" type="button">CONTINUAR</button>
+        <button class="menu-btn secondary" id="btn-open-char" type="button">PERSONAGEM</button>
+        <button class="menu-btn secondary" id="btn-open-cfg" type="button">CONFIGURAÇÕES</button>
+        <button class="menu-btn secondary" id="btn-open-ctrl" type="button">CONTROLES</button>
+      </div>
+      <p id="save-status-note" style="font-size:11px;text-align:center;margin-top:10px">Verificando salvamento local...</p>
+    </div>
+
+    <div id="view-char" class="subview">
+      <h2 style="font-size:24px">PERSONAGEM</h2>
+      <div class="preview-box" id="char-preview-summary">Sobrevivente · Modelo 3D atualizado ao vivo</div>
+      <div class="field">
+        <label for="inp-char-name">Nome do sobrevivente</label>
+        <input id="inp-char-name" type="text" maxlength="20" placeholder="Ex: Lucas">
+      </div>
+      <div class="field">
+        <label for="sel-char-body">Aparência / Estrutura</label>
+        <select id="sel-char-body">
+          <option value="masculino">Masculina (estrutura padrão)</option>
+          <option value="feminino">Feminina (adaptação leve no modelo)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Cor da roupa</label>
+        <div class="swatches" id="outfit-swatches"></div>
+      </div>
+      <div class="field">
+        <label>Cor da mochila / acessório</label>
+        <div class="swatches" id="pack-swatches"></div>
+      </div>
+      <div class="menu-list">
+        <button class="menu-btn" id="btn-save-char" type="button">SALVAR PERSONAGEM</button>
+        <button class="menu-btn secondary" id="btn-back-from-char" type="button">VOLTAR AO MENU</button>
+      </div>
+    </div>
+
+    <div id="view-cfg" class="subview">
+      <h2 style="font-size:24px">CONFIGURAÇÕES</h2>
+      <div class="field">
+        <label><span>Sensibilidade da câmera</span><b id="lbl-cam-sens">1.0x</b></label>
+        <input id="rng-cam-sens" type="range" min="0.3" max="2.5" step="0.1" value="1.0">
+      </div>
+      <div class="field">
+        <label><span>Volume geral</span><b id="lbl-vol">80%</b></label>
+        <input id="rng-vol" type="range" min="0" max="100" step="5" value="80">
+      </div>
+      <div class="field">
+        <label for="sel-graphics">Qualidade gráfica</label>
+        <select id="sel-graphics">
+          <option value="alta">Alta (sombras 2048 + nitidez máxima)</option>
+          <option value="media">Média (equilíbrio para celular)</option>
+          <option value="baixa">Baixa (máximo FPS no iPhone)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label><span>Tamanho dos controles</span><b id="lbl-ctrl-size">100%</b></label>
+        <input id="rng-ctrl-size" type="range" min="80" max="130" step="5" value="100">
+      </div>
+      <div class="field">
+        <label><span>Transparência dos controles</span><b id="lbl-ctrl-alpha">88%</b></label>
+        <input id="rng-ctrl-alpha" type="range" min="35" max="100" step="5" value="88">
+      </div>
+      <div class="field">
+        <label><span>Sensibilidade do joystick</span><b id="lbl-joy-sens">1.0x</b></label>
+        <input id="rng-joy-sens" type="range" min="0.5" max="1.8" step="0.1" value="1.0">
+      </div>
+      <div class="menu-list">
+        <button class="menu-btn" id="btn-save-cfg" type="button">SALVAR CONFIGURAÇÕES</button>
+        <button class="menu-btn secondary" id="btn-back-from-cfg" type="button">VOLTAR AO MENU</button>
+      </div>
+    </div>
+
+    <div id="view-ctrl" class="subview">
+      <h2 style="font-size:24px">CONTROLES</h2>
+      <ul class="controls-help">
+        <li><b>Movimentar:</b> Joystick esquerdo na tela ou teclas <b>WASD / Setas</b>.</li>
+        <li><b>Câmera:</b> Arraste o dedo na área direita da tela ou arraste com o mouse.</li>
+        <li><b>Correr:</b> Segure <b>CORRER</b> na tela ou <b>Shift</b>.</li>
+        <li><b>Pular:</b> Toque em <b>PULAR</b> na tela ou <b>Espaço</b>.</li>
+        <li><b>Atacar:</b> Toque em <b>ATACAR</b> na tela ou <b>Enter / Clique</b>.</li>
+        <li><b>Interagir / Coletar:</b> Toque em <b>INTERAGIR</b> / <b>COLETAR</b> ou tecla <b>E</b>.</li>
+        <li><b>Comer / Beber:</b> Toque em <b>COMER</b> (tecla <b>F</b>) ou <b>BEBER</b> (tecla <b>R</b>).</li>
+      </ul>
+      <div class="menu-list">
+        <button class="menu-btn secondary" id="btn-back-from-ctrl" type="button">VOLTAR AO MENU</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+const STORAGE_KEYS = {
+  PROFILE: 'ultimo_refugio_profile_v1',
+  SETTINGS: 'ultimo_refugio_settings_v1',
+  SAVE: 'ultimo_refugio_save_v1'
+};
+
+const OUTFIT_COLORS = ['#344d68', '#7d3b32', '#3c6e47', '#8a6528', '#524373', '#2e6f73'];
+const PACK_COLORS = ['#76563a', '#4a4e54', '#2f4538', '#7a382e', '#6e5830'];
+
+const DEFAULT_PROFILE = {
+  name: 'Sobrevivente',
+  bodyType: 'masculino',
+  outfitColor: '#344d68',
+  packColor: '#76563a'
+};
+
+const DEFAULT_SETTINGS = {
+  camSens: 1.0,
+  volume: 80,
+  graphics: 'alta',
+  ctrlSize: 100,
+  ctrlAlpha: 88,
+  joySens: 1.0
+};
+
+function safeReadJSON(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return structuredClone(fallback);
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return structuredClone(fallback);
+    return { ...structuredClone(fallback), ...parsed };
+  } catch (_) {
+    return structuredClone(fallback);
+  }
+}
+
+function safeWriteJSON(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+let profile = safeReadJSON(STORAGE_KEYS.PROFILE, DEFAULT_PROFILE);
+let settings = safeReadJSON(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+
+let audioCtx = null;
+function playCue(freq = 320, duration = 0.08, type = 'triangle') {
+  const vol = Math.max(0, Math.min(1, Number(settings.volume ?? 80) / 100));
+  if (vol <= 0) return;
+  try {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0.06 * vol;
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+  } catch (_) {}
+}
+
+try {
+  const THREE = await import('https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js');
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x91b9c2);
+  scene.fog = new THREE.Fog(0x91b9c2, 35, 115);
+
+  const camera = new THREE.PerspectiveCamera(65, innerWidth / innerHeight, 0.1, 250);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  document.body.appendChild(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xc9e5ff, 0x33402b, 1.7));
+  const sun = new THREE.DirectionalLight(0xffe2b2, 2.2);
+  sun.position.set(-25, 45, 20);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  scene.add(sun);
+
+  const mat = (c, r = .9) => new THREE.MeshStandardMaterial({ color: c, roughness: r });
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), mat(0x536b43));
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  const grid = new THREE.GridHelper(220, 55, 0x6c8058, 0x61764e);
+  grid.position.y = 0.015;
+  grid.material.opacity = 0.12;
+  grid.material.transparent = true;
+  scene.add(grid);
+
+  const player = new THREE.Group();
+  scene.add(player);
+
+  const bodyMat = new THREE.MeshStandardMaterial({ color: profile.outfitColor || '#344d68', roughness: 0.85 });
+  const headMat = new THREE.MeshStandardMaterial({ color: 0xd3a77f, roughness: 0.85 });
+  const packMat = new THREE.MeshStandardMaterial({ color: profile.packColor || '#76563a', roughness: 0.9 });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.75, 5, 10), bodyMat);
+  body.position.y = 0.95;
+  body.castShadow = true;
+  player.add(body);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), headMat);
+  head.position.y = 1.62;
+  head.castShadow = true;
+  player.add(head);
+
+  const pack = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.58, 0.22), packMat);
+  pack.position.set(0, 1.05, -0.38);
+  pack.castShadow = true;
+  player.add(pack);
+
+  function applyCharacterCustomization(prof) {
+    const cleanName = (prof.name || 'Sobrevivente').trim().slice(0, 20) || 'Sobrevivente';
+    prof.name = cleanName;
+    bodyMat.color.set(prof.outfitColor || '#344d68');
+    packMat.color.set(prof.packColor || '#76563a');
+
+    if (prof.bodyType === 'feminino') {
+      body.scale.set(0.88, 0.96, 0.88);
+      head.scale.set(0.94, 0.96, 0.94);
+      pack.scale.set(0.88, 0.92, 0.92);
+      pack.position.set(0, 1.02, -0.34);
+    } else {
+      body.scale.set(1, 1, 1);
+      head.scale.set(1, 1, 1);
+      pack.scale.set(1, 1, 1);
+      pack.position.set(0, 1.05, -0.38);
+    }
+
+    document.getElementById('hud-title').innerHTML =
+      `${cleanName.toUpperCase()} <span style="color:#c5e36b">/ REFÚGIO</span>`;
+    document.getElementById('char-preview-summary').textContent =
+      `${cleanName} · ${prof.bodyType === 'feminino' ? 'Feminino' : 'Masculino'} · Roupa ${prof.outfitColor}`;
+  }
+
+  function applyGraphicsSettings(cfg) {
+    const q = cfg.graphics || 'alta';
+    if (q === 'baixa') {
+      renderer.setPixelRatio(1);
+      renderer.shadowMap.enabled = false;
+      grid.visible = false;
+    } else if (q === 'media') {
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+      renderer.shadowMap.enabled = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      grid.visible = true;
+    } else {
+      renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      grid.visible = true;
+    }
+    renderer.setSize(innerWidth, innerHeight);
+
+    const sizeFactor = (Number(cfg.ctrlSize ?? 100)) / 100;
+    const alphaFactor = Math.max(0.35, Math.min(1, (Number(cfg.ctrlAlpha ?? 88)) / 100));
+    document.documentElement.style.setProperty('--ctrl-scale', String(sizeFactor));
+    document.documentElement.style.setProperty('--ctrl-alpha', String(alphaFactor));
+  }
+
+  applyCharacterCustomization(profile);
+  applyGraphicsSettings(settings);
+
+  const resources = [];
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  function tree(x, z) {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 2, 7), mat(0x60432d));
+    trunk.position.y = 1;
+    trunk.castShadow = true;
+    g.add(trunk);
+    const crown = new THREE.Mesh(new THREE.ConeGeometry(rand(1.05, 1.45), rand(2.1, 2.8), 7), mat(0x294d36));
+    crown.position.y = 2.8;
+    crown.castShadow = true;
+    g.add(crown);
+    g.position.set(x, 0, z);
+    scene.add(g);
+    resources.push({ obj: g, type: 'wood', amount: 1, rad: 1.6 });
+  }
+
+  function rock(x, z) {
+    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(rand(0.45, 0.75), 0), mat(0x777d79));
+    m.position.set(x, 0.4, z);
+    m.scale.y = 0.7;
+    m.castShadow = true;
+    scene.add(m);
+    resources.push({ obj: m, type: 'stone', amount: 1, rad: 1.3 });
+  }
+
+  function bush(x, z) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.6, 9, 7), mat(0x668c42));
+    m.position.set(x, 0.45, z);
+    m.scale.set(1.2, 0.8, 1);
+    scene.add(m);
+    resources.push({ obj: m, type: 'berries', amount: 2, rad: 1.4 });
+  }
+
+  for (let i = 0; i < 100; i++) {
+    const x = rand(-85, 85), z = rand(-85, 85);
+    if (Math.hypot(x, z) < 9) continue;
+    const q = Math.random();
+    if (q < 0.55) tree(x, z);
+    else if (q < 0.78) rock(x, z);
+    else bush(x, z);
+  }
+
+  const inv = { wood: 0, stone: 0, berries: 0 };
+  let hp = 100, food = 100, water = 100, elapsed = 0, started = false, dead = false, day = 1;
+  let velY = 0, isGrounded = true;
+
+  const zombies = [];
+  function zombie(x, z) {
+    const g = new THREE.Group();
+    const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.7, 4, 8), mat(0x66806b));
+    b.position.y = 0.9;
+    b.castShadow = true;
+    g.add(b);
+    const h = new THREE.Mesh(new THREE.SphereGeometry(0.27, 12, 10), mat(0x9caa83));
+    h.position.y = 1.55;
+    g.add(h);
+    g.position.set(x, 0, z);
+    scene.add(g);
+    zombies.push({ obj: g, hp: 3, hit: 0 });
+  }
+
+  function respawnInitialZombies() {
+    while (zombies.length > 0) {
+      const item = zombies.pop();
+      scene.remove(item.obj);
+    }
+    for (let i = 0; i < 8; i++) zombie(rand(-55, 55), rand(-55, 55));
+  }
+  respawnInitialZombies();
+
+  const msg = (s) => {
+    const el = document.getElementById('message');
+    el.textContent = s;
+    el.style.display = 'block';
+    clearTimeout(msg.t);
+    msg.t = setTimeout(() => { el.style.display = 'none'; }, 1800);
+  };
+
+  function updateHud() {
+    for (const [id, v] of [['hp', hp], ['food', food], ['water', water]]) {
+      document.getElementById(id).style.width = Math.max(0, Math.min(100, v)) + '%';
+    }
+    document.getElementById('hpv').textContent = Math.ceil(hp);
+    document.getElementById('foodv').textContent = Math.ceil(food);
+    document.getElementById('waterv').textContent = Math.ceil(water);
+    document.getElementById('inv').textContent =
+      `🪵 Madeira: ${inv.wood}   🪨 Pedra: ${inv.stone}   🍓 Frutos: ${inv.berries}`;
+  }
+
+  function triggerJump() {
+    if (!started || dead) return;
+    if (isGrounded) {
+      velY = 6.8;
+      isGrounded = false;
+      playCue(240, 0.07, 'sine');
+    }
+  }
+
+  function collect() {
+    if (!started || dead) return;
+    let near = null, dist = 3.2;
+    for (const r of resources) {
+      if (!r.obj.visible) continue;
+      const d = player.position.distanceTo(r.obj.position);
+      if (d < dist) { near = r; dist = d; }
+    }
+    if (near) {
+      inv[near.type] += near.amount;
+      near.obj.visible = false;
+      playCue(520, 0.08, 'triangle');
+      msg(near.type === 'wood' ? 'Madeira coletada' : near.type === 'stone' ? 'Pedra coletada' : 'Frutos coletados');
+      updateHud();
+      saveGameState();
+    } else {
+      msg('Nada próximo para coletar');
+    }
+  }
+
+  function attack() {
+    if (!started || dead) return;
+    let target = null, dmin = 3.2;
+    for (const z of zombies) {
+      const d = player.position.distanceTo(z.obj.position);
+      if (d < dmin) { target = z; dmin = d; }
+    }
+    playCue(160, 0.09, 'sawtooth');
+    if (target) {
+      target.hp--;
+      const push = new THREE.Vector3().subVectors(target.obj.position, player.position).normalize().multiplyScalar(1.3);
+      target.obj.position.add(push);
+      if (target.hp <= 0) {
+        scene.remove(target.obj);
+        zombies.splice(zombies.indexOf(target), 1);
+        msg('Infectado eliminado');
+      } else {
+        msg('Você atingiu o infectado!');
+      }
+      saveGameState();
+    } else {
+      msg('Ataque no vazio');
+    }
+  }
+
+  function eatBerries() {
+    if (!started || dead) return;
+    if (inv.berries > 0) {
+      inv.berries--;
+      food = Math.min(100, food + 28);
+      playCue(440, 0.08, 'sine');
+      msg('Você comeu frutos (+Fome)');
+      updateHud();
+      saveGameState();
+    } else {
+      msg('Sem frutos para comer');
+    }
+  }
+
+  function drinkWater() {
+    if (!started || dead) return;
+    water = Math.min(100, water + 35);
+    playCue(490, 0.08, 'sine');
+    msg('Você encontrou água da chuva (+Sede)');
+    updateHud();
+    saveGameState();
+  }
+
+  function interactAction() {
+    if (!started || dead) return;
+    let nearRes = null, minD = 3.2;
+    for (const r of resources) {
+      if (!r.obj.visible) continue;
+      const d = player.position.distanceTo(r.obj.position);
+      if (d < minD) { minD = d; nearRes = r; }
+    }
+    if (nearRes) {
+      collect();
+    } else if (inv.berries > 0 && food < 85) {
+      eatBerries();
+    } else if (water < 85) {
+      drinkWater();
+    } else {
+      msg('Nenhuma interação disponível por perto');
+    }
+  }
+
+  function isValidSave(obj) {
+    if (!obj || typeof obj !== 'object') return false;
+    if (!obj.pos || typeof obj.pos.x !== 'number' || typeof obj.pos.z !== 'number') return false;
+    if (typeof obj.hp !== 'number' || Number.isNaN(obj.hp) || obj.hp <= 0) return false;
+    if (typeof obj.elapsed !== 'number' || Number.isNaN(obj.elapsed)) return false;
+    if (!obj.inv || typeof obj.inv.wood !== 'number' || typeof obj.inv.stone !== 'number' || typeof obj.inv.berries !== 'number') return false;
+    return true;
+  }
+
+  function getValidSave() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.SAVE);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return isValidSave(parsed) ? parsed : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function saveGameState() {
+    if (dead) return;
+    const hiddenResourceIndices = [];
+    for (let i = 0; i < resources.length; i++) {
+      if (!resources[i].obj.visible) hiddenResourceIndices.push(i);
+    }
+    const payload = {
+      version: 1,
+      savedAt: Date.now(),
+      pos: { x: player.position.x, y: player.position.y, z: player.position.z },
+      yaw,
+      pitch,
+      hp,
+      food,
+      water,
+      elapsed,
+      day,
+      inv: { ...inv },
+      hiddenResourceIndices
+    };
+    safeWriteJSON(STORAGE_KEYS.SAVE, payload);
+    refreshContinueButton();
+  }
+
+  function refreshContinueButton() {
+    const btnCont = document.getElementById('btn-continue');
+    const note = document.getElementById('save-status-note');
+    const valid = getValidSave();
+    if (valid) {
+      btnCont.disabled = false;
+      const savedDay = Math.floor(valid.elapsed / 150) + 1;
+      note.textContent = `Salvamento encontrado: Dia ${savedDay} · Vida ${Math.ceil(valid.hp)}`;
+    } else {
+      btnCont.disabled = true;
+      note.textContent = 'Nenhum salvamento válido encontrado ainda.';
+    }
+  }
+
+  function resetWorldForNewGame() {
+    dead = false;
+    elapsed = 0;
+    day = 1;
+    hp = 100;
+    food = 100;
+    water = 100;
+    inv.wood = 0;
+    inv.stone = 0;
+    inv.berries = 0;
+    velY = 0;
+    isGrounded = true;
+    player.position.set(0, 0, 0);
+    player.rotation.y = 0;
+    yaw = 0;
+    pitch = 0.24;
+    for (const r of resources) r.obj.visible = true;
+    respawnInitialZombies();
+    updateHud();
+  }
+
+  function loadSavedGame() {
+    const s = getValidSave();
+    if (!s) {
+      msg('Salvamento indisponível ou inválido');
+      refreshContinueButton();
+      return false;
+    }
+    dead = false;
+    player.position.set(s.pos.x, Math.max(0, s.pos.y || 0), s.pos.z);
+    velY = 0;
+    isGrounded = true;
+    yaw = typeof s.yaw === 'number' ? s.yaw : 0;
+    pitch = typeof s.pitch === 'number' ? s.pitch : 0.24;
+    hp = Math.max(1, Math.min(100, s.hp));
+    food = Math.max(0, Math.min(100, typeof s.food === 'number' ? s.food : 100));
+    water = Math.max(0, Math.min(100, typeof s.water === 'number' ? s.water : 100));
+    elapsed = Math.max(0, s.elapsed);
+    day = Math.floor(elapsed / 150) + 1;
+    inv.wood = Math.max(0, Math.floor(s.inv.wood));
+    inv.stone = Math.max(0, Math.floor(s.inv.stone));
+    inv.berries = Math.max(0, Math.floor(s.inv.berries));
+
+    for (const r of resources) r.obj.visible = true;
+    if (Array.isArray(s.hiddenResourceIndices)) {
+      for (const idx of s.hiddenResourceIndices) {
+        if (resources[idx]) resources[idx].obj.visible = false;
+      }
+    }
+    respawnInitialZombies();
+    updateHud();
+    return true;
+  }
+
+  const overlayEl = document.getElementById('overlay');
+  const touchLayerEl = document.getElementById('touch-layer');
+  let charPreviewMode = false;
+
+  function showSubView(viewId) {
+    document.querySelectorAll('.subview').forEach(el => el.classList.remove('active'));
+    const target = document.getElementById(viewId);
+    if (target) target.classList.add('active');
+    charPreviewMode = (viewId === 'view-char');
+    if (charPreviewMode) {
+      yaw = 0.35;
+      pitch = 0.18;
+    }
+  }
+
+  function openMenu(viewId = 'view-main') {
+    started = false;
+    touchLayerEl.classList.remove('active');
+    refreshContinueButton();
+    showSubView(viewId);
+    overlayEl.style.display = 'flex';
+  }
+
+  function enterGameplay() {
+    charPreviewMode = false;
+    overlayEl.style.display = 'none';
+    started = true;
+    touchLayerEl.classList.add('active');
+    saveGameState();
+  }
+
+  document.getElementById('btn-open-menu').onclick = () => {
+    if (dead) return;
+    saveGameState();
+    openMenu('view-main');
+  };
+
+  document.getElementById('btn-new-game').onclick = () => {
+    resetWorldForNewGame();
+    enterGameplay();
+    msg('Nova partida iniciada');
+  };
+
+  document.getElementById('btn-continue').onclick = () => {
+    if (loadSavedGame()) {
+      enterGameplay();
+      msg('Progresso carregado');
+    }
+  };
+
+  document.getElementById('btn-open-char').onclick = () => {
+    populateCharForm();
+    showSubView('view-char');
+  };
+
+  document.getElementById('btn-open-cfg').onclick = () => {
+    populateCfgForm();
+    showSubView('view-cfg');
+  };
+
+  document.getElementById('btn-open-ctrl').onclick = () => showSubView('view-ctrl');
+  document.getElementById('btn-back-from-char').onclick = () => showSubView('view-main');
+  document.getElementById('btn-back-from-cfg').onclick = () => showSubView('view-main');
+  document.getElementById('btn-back-from-ctrl').onclick = () => showSubView('view-main');
+
+  function renderSwatches(containerId, colors, currentColor, onSelect) {
+    const box = document.getElementById(containerId);
+    box.innerHTML = '';
+    colors.forEach(col => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'swatch' + (col.toLowerCase() === String(currentColor).toLowerCase() ? ' active' : '');
+      btn.style.background = col;
+      btn.onclick = () => {
+        box.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+        btn.classList.add('active');
+        onSelect(col);
+      };
+      box.appendChild(btn);
+    });
+  }
+
+  let draftProfile = { ...profile };
+  function populateCharForm() {
+    draftProfile = { ...profile };
+    document.getElementById('inp-char-name').value = draftProfile.name;
+    document.getElementById('sel-char-body').value = draftProfile.bodyType || 'masculino';
+    renderSwatches('outfit-swatches', OUTFIT_COLORS, draftProfile.outfitColor, col => {
+      draftProfile.outfitColor = col;
+      applyCharacterCustomization(draftProfile);
+    });
+    renderSwatches('pack-swatches', PACK_COLORS, draftProfile.packColor, col => {
+      draftProfile.packColor = col;
+      applyCharacterCustomization(draftProfile);
+    });
+    applyCharacterCustomization(draftProfile);
+  }
+
+  document.getElementById('inp-char-name').oninput = e => {
+    draftProfile.name = e.target.value;
+    applyCharacterCustomization(draftProfile);
+  };
+  document.getElementById('sel-char-body').onchange = e => {
+    draftProfile.bodyType = e.target.value;
+    applyCharacterCustomization(draftProfile);
+  };
+  document.getElementById('btn-save-char').onclick = () => {
+    profile = {
+      name: (document.getElementById('inp-char-name').value || 'Sobrevivente').trim().slice(0, 20) || 'Sobrevivente',
+      bodyType: document.getElementById('sel-char-body').value,
+      outfitColor: draftProfile.outfitColor || '#344d68',
+      packColor: draftProfile.packColor || '#76563a'
+    };
+    applyCharacterCustomization(profile);
+    safeWriteJSON(STORAGE_KEYS.PROFILE, profile);
+    msg('Personagem salvo');
+    showSubView('view-main');
+  };
+
+  function populateCfgForm() {
+    document.getElementById('rng-cam-sens').value = settings.camSens;
+    document.getElementById('lbl-cam-sens').textContent = Number(settings.camSens).toFixed(1) + 'x';
+    document.getElementById('rng-vol').value = settings.volume;
+    document.getElementById('lbl-vol').textContent = settings.volume + '%';
+    document.getElementById('sel-graphics').value = settings.graphics;
+    document.getElementById('rng-ctrl-size').value = settings.ctrlSize;
+    document.getElementById('lbl-ctrl-size').textContent = settings.ctrlSize + '%';
+    document.getElementById('rng-ctrl-alpha').value = settings.ctrlAlpha;
+    document.getElementById('lbl-ctrl-alpha').textContent = settings.ctrlAlpha + '%';
+    document.getElementById('rng-joy-sens').value = settings.joySens;
+    document.getElementById('lbl-joy-sens').textContent = Number(settings.joySens).toFixed(1) + 'x';
+  }
+
+  document.getElementById('rng-cam-sens').oninput = e => {
+    document.getElementById('lbl-cam-sens').textContent = Number(e.target.value).toFixed(1) + 'x';
+  };
+  document.getElementById('rng-vol').oninput = e => {
+    document.getElementById('lbl-vol').textContent = e.target.value + '%';
+  };
+  document.getElementById('rng-ctrl-size').oninput = e => {
+    document.getElementById('lbl-ctrl-size').textContent = e.target.value + '%';
+  };
+  document.getElementById('rng-ctrl-alpha').oninput = e => {
+    document.getElementById('lbl-ctrl-alpha').textContent = e.target.value + '%';
+  };
+  document.getElementById('rng-joy-sens').oninput = e => {
+    document.getElementById('lbl-joy-sens').textContent = Number(e.target.value).toFixed(1) + 'x';
+  };
+
+  document.getElementById('btn-save-cfg').onclick = () => {
+    settings = {
+      camSens: Number(document.getElementById('rng-cam-sens').value),
+      volume: Number(document.getElementById('rng-vol').value),
+      graphics: document.getElementById('sel-graphics').value,
+      ctrlSize: Number(document.getElementById('rng-ctrl-size').value),
+      ctrlAlpha: Number(document.getElementById('rng-ctrl-alpha').value),
+      joySens: Number(document.getElementById('rng-joy-sens').value)
+    };
+    applyGraphicsSettings(settings);
+    safeWriteJSON(STORAGE_KEYS.SETTINGS, settings);
+    playCue(460, 0.07, 'triangle');
+    msg('Configurações salvas');
+    showSubView('view-main');
+  };
+
+  const keys = {};
+  let lastCollect = false, lastAttack = false, lastJump = false;
+
+  addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+      e.preventDefault();
+    }
+  });
+  addEventListener('keyup', e => {
+    keys[e.code] = false;
+  });
+
+  let yaw = 0, camDist = 8, pitch = 0.24;
+  let camPointerId = null, lastCamX = 0, lastCamY = 0;
+
+  function startCamDrag(e) {
+    if (camPointerId !== null) return;
+    camPointerId = e.pointerId;
+    lastCamX = e.clientX;
+    lastCamY = e.clientY;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+
+  function moveCamDrag(e) {
+    if (e.pointerId !== camPointerId) return;
+    const sens = Number(settings.camSens ?? 1.0);
+    yaw -= (e.clientX - lastCamX) * 0.006 * sens;
+    pitch = Math.max(-0.05, Math.min(0.75, pitch + (e.clientY - lastCamY) * 0.003 * sens));
+    lastCamX = e.clientX;
+    lastCamY = e.clientY;
+  }
+
+  function endCamDrag(e) {
+    if (e.pointerId === camPointerId) camPointerId = null;
+  }
+
+  renderer.domElement.addEventListener('pointerdown', startCamDrag);
+  renderer.domElement.addEventListener('pointermove', moveCamDrag);
+  renderer.domElement.addEventListener('pointerup', endCamDrag);
+  renderer.domElement.addEventListener('pointercancel', endCamDrag);
+
+  const camZone = document.getElementById('cam-zone');
+  camZone.addEventListener('pointerdown', startCamDrag);
+  camZone.addEventListener('pointermove', moveCamDrag);
+  camZone.addEventListener('pointerup', endCamDrag);
+  camZone.addEventListener('pointercancel', endCamDrag);
+
+  const joyZone = document.getElementById('joy-zone');
+  const joyKnob = document.getElementById('joy-knob');
+  let joyPointerId = null;
+  let joyVec = { x: 0, y: 0 };
+
+  function updateJoystick(clientX, clientY) {
+    const rect = joyZone.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const maxR = Math.max(24, rect.width * 0.36);
+    const jSens = Number(settings.joySens ?? 1.0);
+
+    let dx = (clientX - cx) * jSens;
+    let dy = (clientY - cy) * jSens;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxR) {
+      dx = (dx / dist) * maxR;
+      dy = (dy / dist) * maxR;
+    }
+    joyKnob.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`;
+    joyVec.x = Math.max(-1, Math.min(1, dx / maxR));
+    joyVec.y = Math.max(-1, Math.min(1, dy / maxR));
+  }
+
+  function resetJoystick() {
+    joyPointerId = null;
+    joyVec.x = 0;
+    joyVec.y = 0;
+    joyKnob.style.transform = 'translate(0px, 0px)';
+  }
+
+  joyZone.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    if (joyPointerId !== null) return;
+    joyPointerId = e.pointerId;
+    try { joyZone.setPointerCapture(e.pointerId); } catch (_) {}
+    updateJoystick(e.clientX, e.clientY);
+  });
+  joyZone.addEventListener('pointermove', e => {
+    if (e.pointerId !== joyPointerId) return;
+    updateJoystick(e.clientX, e.clientY);
+  });
+  joyZone.addEventListener('pointerup', e => {
+    if (e.pointerId === joyPointerId) resetJoystick();
+  });
+  joyZone.addEventListener('pointercancel', e => {
+    if (e.pointerId === joyPointerId) resetJoystick();
+  });
+
+  let touchSprintHeld = false;
+  const btnRun = document.getElementById('btn-run');
+  btnRun.addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    touchSprintHeld = !touchSprintHeld;
+    btnRun.classList.toggle('active-hold', touchSprintHeld);
+  });
+
+  document.getElementById('btn-jump').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    triggerJump();
+  });
+  document.getElementById('btn-attack').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    attack();
+  });
+  document.getElementById('btn-interact').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    interactAction();
+  });
+  document.getElementById('btn-collect').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    collect();
+  });
+  document.getElementById('btn-eat').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    eatBerries();
+  });
+  document.getElementById('btn-drink').addEventListener('pointerdown', e => {
+    e.stopPropagation();
+    drinkWater();
+  });
+
+  function gameOver(win = false) {
+    dead = true;
+    started = false;
+    touchLayerEl.classList.remove('active');
+    overlayEl.style.display = 'flex';
+    document.querySelector('.panel').innerHTML = win
+      ? '<h2>VOCÊ SOBREVIVEU!</h2><p style="text-align:center">Três dias no mundo hostil. Este é apenas o começo da sua jornada.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">JOGAR NOVAMENTE</button></div>'
+      : '<h2>FIM DA JORNADA</h2><p style="text-align:center">Você não conseguiu sobreviver. Reúna recursos e tente novamente.</p><div class="menu-list"><button class="menu-btn" onclick="location.reload()">TENTAR NOVAMENTE</button></div>';
+  }
+
+  refreshContinueButton();
+
+  const clockEl = document.getElementById('clock');
+  let last = performance.now();
+  let saveTimer = 0;
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+
+    if (started && !dead) {
+      elapsed += dt;
+      saveTimer += dt;
+      food = Math.max(0, food - dt * 0.16);
+      water = Math.max(0, water - dt * 0.23);
+      if (food === 0 || water === 0) hp -= dt * 0.9;
+
+      const forward = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const move = new THREE.Vector3();
+
+      if (keys.KeyW || keys.ArrowUp) move.add(forward);
+      if (keys.KeyS || keys.ArrowDown) move.sub(forward);
+      if (keys.KeyD || keys.ArrowRight) move.add(right);
+      if (keys.KeyA || keys.ArrowLeft) move.sub(right);
+
+      if (Math.hypot(joyVec.x, joyVec.y) > 0.08) {
+        move.addScaledVector(forward, -joyVec.y);
+        move.addScaledVector(right, joyVec.x);
+      }
+
+      if (move.lengthSq() > 0.0001) {
+        const sprinting = !!(keys.ShiftLeft || keys.ShiftRight || touchSprintHeld);
+        const speed = sprinting ? 8 : 4.5;
+        move.normalize().multiplyScalar(speed * dt);
+        const nextX = Math.max(-105, Math.min(105, player.position.x + move.x));
+        const nextZ = Math.max(-105, Math.min(105, player.position.z + move.z));
+        player.position.x = nextX;
+        player.position.z = nextZ;
+        player.rotation.y = Math.atan2(-move.x, -move.z);
+      }
+
+      if (keys.Space && !lastJump) triggerJump();
+      lastJump = !!keys.Space;
+
+      if (!isGrounded || velY > 0) {
+        velY -= 18 * dt;
+        player.position.y += velY * dt;
+        if (player.position.y <= 0) {
+          player.position.y = 0;
+          velY = 0;
+          isGrounded = true;
+        }
+      }
+
+      if (keys.KeyE && !lastCollect) collect();
+      lastCollect = !!keys.KeyE;
+
+      if ((keys.Enter || keys.NumpadEnter) && !lastAttack) attack();
+      lastAttack = !!(keys.Enter || keys.NumpadEnter);
+
+      if (keys.KeyF) {
+        keys.KeyF = false;
+        eatBerries();
+      }
+      if (keys.KeyR) {
+        keys.KeyR = false;
+        drinkWater();
+      }
+
+      for (const z of zombies) {
+        const dir = new THREE.Vector3().subVectors(player.position, z.obj.position);
+        dir.y = 0;
+        const d = dir.length();
+        if (d > 1.35) {
+          dir.normalize();
+          z.obj.position.add(dir.multiplyScalar(dt * (elapsed % 120 > 70 ? 1.7 : 0.85)));
+          z.obj.rotation.y = Math.atan2(-dir.x, -dir.z);
+        } else {
+          z.hit += dt;
+          if (z.hit > 1.1) {
+            hp -= 7;
+            z.hit = 0;
+          }
+        }
+      }
+
+      const t = (elapsed % 150) / 150;
+      const night = t > 0.67;
+      sun.intensity = night ? 0.25 : 2.2;
+      scene.background.set(night ? 0x111b31 : 0x91b9c2);
+      scene.fog.color.set(night ? 0x111b31 : 0x91b9c2);
+      scene.fog.near = night ? 15 : 35;
+      scene.fog.far = night ? 65 : 115;
+
+      day = Math.floor(elapsed / 150) + 1;
+      const hh = Math.floor((8 + (elapsed % 150) / 150 * 24) % 24);
+      clockEl.textContent = `DIA ${day} · ${String(hh).padStart(2, '0')}:00${night ? ' · NOITE' : ''}`;
+
+      if (saveTimer >= 10) {
+        saveTimer = 0;
+        saveGameState();
+      }
+
+      if (elapsed > 450) gameOver(true);
+      if (hp <= 0) gameOver(false);
+      updateHud();
+    }
+
+    const target = new THREE.Vector3(player.position.x, player.position.y + 1, player.position.z);
+    const activeDist = charPreviewMode ? 3.6 : camDist;
+    const activeHeight = charPreviewMode ? 1.4 : (3 + pitch * 5);
+    const offset = new THREE.Vector3(
+      Math.sin(yaw) * activeDist,
+      activeHeight,
+      Math.cos(yaw) * activeDist
+    );
+    camera.position.lerp(target.clone().add(offset), 0.12);
+    camera.lookAt(target);
+
+    renderer.render(scene, camera);
+  }
+
+  requestAnimationFrame(animate);
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  const box = document.getElementById('debugGame');
+  if (box) box.style.display = 'none';
+} catch (error) {
+  reportGameError(error.stack || error.message || String(error));
+}
+
+setTimeout(() => {
+  const box = document.getElementById('debugGame');
+  if (box && box.textContent.includes('carregando')) {
+    box.style.display = 'block';
+    box.innerHTML = document.querySelector('canvas')
+      ? 'MOTOR 3D CARREGADO. Verificando renderização...'
+      : 'ERRO: O motor 3D não criou o canvas.';
+  }
+}, 6000);
+</script>
+</body>
+</html>
