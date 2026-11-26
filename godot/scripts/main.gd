@@ -1575,7 +1575,7 @@ func _spawn_infected(count: int = 7) -> void:
 		var animator := _find_animation_player(visual)
 		_play_best_animation(animator, ["idle", "walk", "move"])
 		var difficulty := 1.0 + float(wave_number - 1) * 0.10
-		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "stagger_timer": 0.0, "knockback": Vector3.ZERO, "alive": true})
+		enemies.append({"node": enemy, "anim": animator, "health": 100.0 * difficulty, "speed": rng.randf_range(1.0, 1.8) * minf(difficulty, 1.45), "attack_timer": rng.randf_range(0.4, 1.5), "stagger_timer": 0.0, "knockback": Vector3.ZERO, "investigate_position": enemy.position, "investigate_timer": 0.0, "alive": true})
 
 
 func _build_faction_camp(camp: Dictionary) -> void:
@@ -1984,6 +1984,13 @@ func _update_infected(delta: float) -> void:
 		var foot_offset := movement_noise_position - infected.global_position
 		var foot_distance := Vector2(foot_offset.x, foot_offset.z).length()
 		var heard_footsteps := movement_noise_timer > 0.0 and foot_distance < movement_noise_radius
+		# Memoria individual: o infectado continua investigando depois que o som termina.
+		if heard_gunshot or heard_footsteps:
+			enemy_data["investigate_position"] = gunshot_noise_position if heard_gunshot else movement_noise_position
+			enemy_data["investigate_timer"] = 8.0 if heard_gunshot else 5.5
+		else:
+			enemy_data["investigate_timer"] = maxf(0.0, float(enemy_data.get("investigate_timer", 0.0)) - delta)
+		var has_memory := float(enemy_data.get("investigate_timer", 0.0)) > 0.0
 		if float(enemy_data.get("stagger_timer", 0.0)) > 0.0:
 			enemy_data["stagger_timer"] = maxf(0.0, float(enemy_data["stagger_timer"]) - delta)
 			var push: Vector3 = enemy_data.get("knockback", Vector3.ZERO)
@@ -1995,7 +2002,7 @@ func _update_infected(delta: float) -> void:
 			continue
 		var infected_detection_radius := 17.0 if crouch_enabled else float(enemy_data.get("activation_radius", 44.0))
 		var territorial_dormant := distance > infected_detection_radius
-		if territorial_dormant and not heard_gunshot and not heard_footsteps:
+		if territorial_dormant and not has_memory:
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 5.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 5.0 * delta)
 			if infected.is_on_floor():
@@ -2004,7 +2011,7 @@ func _update_infected(delta: float) -> void:
 				infected.velocity.y -= 19.0 * delta
 			infected.move_and_slide()
 			continue
-		var pursuit_target := gunshot_noise_position if territorial_dormant and heard_gunshot else movement_noise_position if territorial_dormant and heard_footsteps else player.global_position
+		var pursuit_target := player.global_position if not territorial_dormant else enemy_data.get("investigate_position", player.global_position)
 		var pursuit_offset := pursuit_target - infected.global_position
 		var pursuit_distance := Vector2(pursuit_offset.x, pursuit_offset.z).length()
 		if pursuit_distance > 1.55:
@@ -2016,9 +2023,10 @@ func _update_infected(delta: float) -> void:
 		else:
 			infected.velocity.x = move_toward(infected.velocity.x, 0.0, 7.0 * delta)
 			infected.velocity.z = move_toward(infected.velocity.z, 0.0, 7.0 * delta)
-			_play_best_animation(enemy_data["anim"], ["attack", "bite", "idle", "stand"])
-			enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
-			if float(enemy_data["attack_timer"]) <= 0.0:
+			if not territorial_dormant:
+				_play_best_animation(enemy_data["anim"], ["attack", "bite", "idle", "stand"])
+				enemy_data["attack_timer"] = float(enemy_data["attack_timer"]) - delta
+			if not territorial_dormant and float(enemy_data["attack_timer"]) <= 0.0:
 				if dodge_timer <= 0.0:
 					player_health = maxf(0.0, player_health - 7.0)
 					_trigger_camera_shake(0.055)
