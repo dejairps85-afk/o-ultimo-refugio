@@ -3918,7 +3918,6 @@ func _apply_crouch_pose() -> void:
 		collision.position.y = capsule.height * 0.5
 	if is_instance_valid(camera_pivot):
 		camera_pivot.global_position = player.global_position + Vector3.UP * (1.15 if crouch_enabled else 1.65)
-	if is_instance_valid(camera):
 
 func _toggle_crouch() -> void:
 	crouch_enabled = not crouch_enabled
@@ -3943,6 +3942,9 @@ func _toggle_sprint() -> void:
 		sprint_button.text = "CORRER: ON" if sprint_enabled else "CORRER: OFF"
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(camera_pivot) and is_instance_valid(player):
+		var focus := player.global_position + Vector3.UP * (1.15 if crouch_enabled else 1.65)
+		camera_pivot.global_position = focus if camera_pivot.global_position.distance_to(focus) > 12.0 else camera_pivot.global_position.lerp(focus, 1.0 - exp(-12.0 * delta))
 	_update_alien_event(delta)
 	_update_alien_guards(delta)
 	gunshot_noise_timer = maxf(0.0, gunshot_noise_timer - delta)
