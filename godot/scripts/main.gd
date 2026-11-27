@@ -556,8 +556,8 @@ func _setup_environment() -> void:
 	env.tonemap_exposure = 1.05
 	env.adjustment_enabled = true
 	env.adjustment_brightness = 1.02
-	env.adjustment_contrast = 1.08
-	env.adjustment_saturation = 1.10
+	env.adjustment_contrast = 1.14
+	env.adjustment_saturation = 0.84
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.48, 0.54, 0.48)
 	env.ambient_light_energy = 0.65
@@ -2765,7 +2765,8 @@ func _update_camera_feedback(delta: float) -> void:
 		return
 	if camera_shake_timer > 0.0:
 		camera_shake_timer = maxf(0.0, camera_shake_timer - delta)
-		var fade := camera_shake_timer / 0.18
+		var fade := clampf(camera_shake_timer / 0.18, 0.0, 1.0)
+		fade *= fade
 		camera.rotation.z = sin(float(Time.get_ticks_msec()) * 0.075) * camera_shake_strength * fade
 		if camera_shake_timer <= 0.0:
 			camera.rotation.z = 0.0
@@ -2850,25 +2851,31 @@ func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 5
 	add_child(layer)
+	var hud_root := Control.new()
+	layer.add_child(hud_root)
+	hud_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	hud_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_root.theme = _professional_hud_theme()
 
 	# HUD principal compacto: notificações e barras permanecem sempre visíveis.
 	status_label = Label.new()
 	status_label.text = "O ÚLTIMO REFÚGIO"
 	status_label.position = Vector2(14, 10)
-	status_label.size = Vector2(300, 34)
+	status_label.size = Vector2(290, 34)
 	status_label.add_theme_font_size_override("font_size", 15)
 	status_label.add_theme_color_override("font_color", Color(0.92, 0.95, 0.84))
 	status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	layer.add_child(status_label)
+	hud_root.add_child(status_label)
 
 	health_bar = ProgressBar.new()
 	health_bar.min_value = 0
 	health_bar.max_value = 100
 	health_bar.value = player_health
-	health_bar.show_percentage = true
+	health_bar.show_percentage = false
+	health_bar.add_theme_stylebox_override("fill", _hud_style(Color(0.76, 0.29, 0.22), Color.TRANSPARENT, 3))
 	health_bar.custom_minimum_size = Vector2(178, 16)
 	health_bar.position = Vector2(14, 43)
-	layer.add_child(health_bar)
+	hud_root.add_child(health_bar)
 
 	stamina_bar = ProgressBar.new()
 	stamina_bar.min_value = 0
@@ -2877,15 +2884,15 @@ func _build_hud() -> void:
 	stamina_bar.show_percentage = false
 	stamina_bar.custom_minimum_size = Vector2(126, 10)
 	stamina_bar.position = Vector2(14, 64)
-	stamina_bar.modulate = Color(0.72, 0.9, 0.58)
-	layer.add_child(stamina_bar)
+	stamina_bar.add_theme_stylebox_override("fill", _hud_style(Color(0.69, 0.76, 0.48), Color.TRANSPARENT, 3))
+	hud_root.add_child(stamina_bar)
 
 	ammo_label = Label.new()
 	ammo_label.text = "MUNIÇÃO %02d / %03d" % [rifle_ammo, rifle_reserve]
 	ammo_label.position = Vector2(14, 80)
 	ammo_label.add_theme_font_size_override("font_size", 12)
 	ammo_label.add_theme_color_override("font_color", Color(0.96, 0.84, 0.55))
-	layer.add_child(ammo_label)
+	hud_root.add_child(ammo_label)
 
 	# Joystick visual fixo no canto inferior esquerdo.
 	mobile_joystick_base = Panel.new()
@@ -2903,11 +2910,11 @@ func _build_hud() -> void:
 	mobile_joystick_base.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var base_style := StyleBoxFlat.new()
 	base_style.bg_color = Color(0.07, 0.10, 0.09, 0.42)
-	base_style.border_color = Color(0.78, 0.88, 0.72, 0.65)
+	base_style.border_color = Color(0.78, 0.84, 0.80, 0.40)
 	base_style.set_border_width_all(2)
 	base_style.set_corner_radius_all(74)
 	mobile_joystick_base.add_theme_stylebox_override("panel", base_style)
-	layer.add_child(mobile_joystick_base)
+	hud_root.add_child(mobile_joystick_base)
 
 	mobile_joystick_knob = Panel.new()
 	mobile_joystick_knob.name = "MobileJoystickKnob"
@@ -2915,7 +2922,7 @@ func _build_hud() -> void:
 	mobile_joystick_knob.position = Vector2(47, 47)
 	mobile_joystick_knob.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var knob_style := StyleBoxFlat.new()
-	knob_style.bg_color = Color(0.72, 0.83, 0.65, 0.82)
+	knob_style.bg_color = Color(0.72, 0.76, 0.72, 0.56)
 	knob_style.border_color = Color(0.94, 0.98, 0.88, 0.9)
 	knob_style.set_border_width_all(2)
 	knob_style.set_corner_radius_all(27)
@@ -2924,11 +2931,11 @@ func _build_hud() -> void:
 	mobile_joystick_center = Vector2(96, 96)
 
 	# Ações essenciais agrupadas na mão direita.
-	_make_corner_button(layer, "ATACAR", -112, -20, -112, -20, func(): attack_requested = true, Vector2(92, 92), 16)
-	_make_corner_button(layer, "PULAR", -206, -132, -94, -20, func(): jump_requested = true, Vector2(72, 72), 13)
-	_make_corner_button(layer, "ESQUIVA", -206, -132, -174, -102, func(): dodge_requested = true, Vector2(72, 72), 11)
-	_make_corner_button(layer, "USAR", -300, -218, -94, -20, _interact_with_wilderness, Vector2(76, 72), 12)
-	_make_corner_button(layer, "CORRER", -300, -218, -174, -102, _toggle_sprint, Vector2(76, 72), 11)
+	_make_corner_button(hud_root, "ATACAR", -112, -20, -112, -20, func(): attack_requested = true, Vector2(92, 92), 16)
+	_make_corner_button(hud_root, "PULAR", -206, -132, -94, -20, func(): jump_requested = true, Vector2(72, 72), 13)
+	_make_corner_button(hud_root, "ESQUIVA", -206, -132, -174, -102, func(): dodge_requested = true, Vector2(72, 72), 11)
+	_make_corner_button(hud_root, "USAR", -300, -218, -94, -20, _interact_with_wilderness, Vector2(76, 72), 12)
+	_make_corner_button(hud_root, "CORRER", -300, -218, -174, -102, _toggle_sprint, Vector2(76, 72), 11)
 
 	# Informações e ações secundárias ficam dentro de um único menu recolhível.
 	mobile_menu_button = Button.new()
@@ -2945,7 +2952,7 @@ func _build_hud() -> void:
 	mobile_menu_button.offset_bottom = 60
 	mobile_menu_button.focus_mode = Control.FOCUS_NONE
 	mobile_menu_button.pressed.connect(_toggle_mobile_menu)
-	layer.add_child(mobile_menu_button)
+	hud_root.add_child(mobile_menu_button)
 
 	mobile_menu_panel = PanelContainer.new()
 	mobile_menu_panel.name = "MobileUtilityMenu"
@@ -2958,7 +2965,7 @@ func _build_hud() -> void:
 	mobile_menu_panel.offset_top = 68
 	mobile_menu_panel.offset_bottom = -12
 	mobile_menu_panel.visible = false
-	layer.add_child(mobile_menu_panel)
+	hud_root.add_child(mobile_menu_panel)
 	# O menu acompanha a altura disponível e rola em telas pequenas/na horizontal.
 	var menu_scroll := ScrollContainer.new()
 	menu_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -3018,7 +3025,7 @@ func _build_hud() -> void:
 	game_over_label.offset_top = -70
 	game_over_label.offset_bottom = -20
 	game_over_label.visible = false
-	layer.add_child(game_over_label)
+	hud_root.add_child(game_over_label)
 
 	restart_button = Button.new()
 	restart_button.text = "JOGAR NOVAMENTE"
@@ -3033,7 +3040,7 @@ func _build_hud() -> void:
 	restart_button.offset_bottom = 62
 	restart_button.visible = false
 	restart_button.pressed.connect(func(): get_tree().reload_current_scene())
-	layer.add_child(restart_button)
+	hud_root.add_child(restart_button)
 
 	_build_shop_ui(layer)
 
@@ -3049,7 +3056,7 @@ func _make_menu_button(parent: VBoxContainer, caption: String, action: Callable)
 	return button
 
 
-func _make_corner_button(parent: CanvasLayer, caption: String, left: float, right: float, top: float, bottom: float, action: Callable, minimum: Vector2, font_size: int) -> Button:
+func _make_corner_button(parent: Control, caption: String, left: float, right: float, top: float, bottom: float, action: Callable, minimum: Vector2, font_size: int) -> Button:
 	var button := Button.new()
 	button.text = caption
 	button.custom_minimum_size = minimum
@@ -3062,10 +3069,38 @@ func _make_corner_button(parent: CanvasLayer, caption: String, left: float, righ
 	button.offset_top = top
 	button.offset_bottom = bottom
 	button.add_theme_font_size_override("font_size", font_size)
+	button.add_theme_stylebox_override("normal", _hud_style(Color(0.06, 0.09, 0.10, 0.66), Color(0.72, 0.76, 0.70, 0.50), 36))
+	button.add_theme_stylebox_override("pressed", _hud_style(Color(0.34, 0.43, 0.36, 0.90), Color(0.88, 0.93, 0.80), 36))
 	button.focus_mode = Control.FOCUS_NONE
 	button.pressed.connect(action)
 	parent.add_child(button)
 	return button
+
+
+func _hud_style(fill: Color, border: Color, radius: int) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = fill
+	style.border_color = border
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(radius)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 5
+	style.content_margin_bottom = 5
+	return style
+
+
+func _professional_hud_theme() -> Theme:
+	var theme := Theme.new()
+	theme.default_font_size = 15
+	theme.set_color("font_color", "Label", Color(0.91, 0.93, 0.89))
+	theme.set_color("font_color", "Button", Color(0.94, 0.95, 0.90))
+	theme.set_stylebox("normal", "Button", _hud_style(Color(0.09, 0.12, 0.13, 0.94), Color(0.40, 0.47, 0.43, 0.75), 8))
+	theme.set_stylebox("hover", "Button", _hud_style(Color(0.18, 0.23, 0.21), Color(0.60, 0.69, 0.57), 8))
+	theme.set_stylebox("pressed", "Button", _hud_style(Color(0.28, 0.36, 0.29), Color(0.85, 0.90, 0.74), 8))
+	theme.set_stylebox("panel", "PanelContainer", _hud_style(Color(0.035, 0.055, 0.06, 0.96), Color(0.36, 0.43, 0.40), 10))
+	theme.set_stylebox("background", "ProgressBar", _hud_style(Color(0.04, 0.06, 0.07, 0.85), Color(0.34, 0.38, 0.35), 3))
+	return theme
 
 
 func _toggle_mobile_menu() -> void:
@@ -3682,12 +3717,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var viewport_size := get_viewport().get_visible_rect().size
 		if event.pressed:
-			if event.position.x < viewport_size.x * 0.48 and event.position.y > viewport_size.y * 0.48:
+			if active_move_touch == -1 and event.position.distance_to(Vector2(96.0, viewport_size.y - 100.0)) <= 92.0:
 				active_move_touch = event.index
 				var center := Vector2(96.0, viewport_size.y - 100.0)
 				var stick_delta: Vector2 = event.position - center
 				_update_mobile_joystick(stick_delta)
-			elif event.position.x > viewport_size.x * 0.50:
+			elif active_look_touch == -1 and event.position.x > viewport_size.x * 0.50:
 				active_look_touch = event.index
 		else:
 			if event.index == active_move_touch:
@@ -3709,7 +3744,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _update_mobile_joystick(delta: Vector2) -> void:
 	var radius := 58.0
 	var limited := delta.limit_length(radius)
-	_touch_move = Vector2(limited.x / radius, limited.y / radius)
+	var magnitude := limited.length() / radius
+	_touch_move = limited.normalized() * clampf((magnitude - 0.14) / 0.86, 0.0, 1.0)
 	if is_instance_valid(mobile_joystick_knob):
 		mobile_joystick_knob.position = Vector2(47.0, 47.0) + limited * (48.0 / radius)
 
@@ -4007,7 +4043,7 @@ func _physics_process(delta: float) -> void:
 		player.velocity.z = move_toward(player.velocity.z, 0.0, PLAYER_SPEED * 5.0 * delta)
 	if is_instance_valid(camera):
 		var target_fov := 80.0 if sprinting or dodge_timer > 0.0 else 74.0
-		camera.fov = lerpf(camera.fov, target_fov, delta * 4.0)
+		camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-4.0 * delta))
 	if not player.is_on_floor():
 		player.velocity.y -= 19.0 * delta
 	elif jump_requested or Input.is_action_just_pressed("jump"):
