@@ -563,9 +563,9 @@ func _setup_environment() -> void:
 	env.ambient_light_color = Color(0.48, 0.54, 0.48)
 	env.ambient_light_energy = 0.65
 	env.reflected_light_source = Environment.REFLECTION_SOURCE_BG
-	env.fog_enabled = not OS.has_feature("web")
+	env.fog_enabled = true
 	env.fog_light_color = Color(0.48, 0.53, 0.46)
-	env.fog_density = 0.0048
+	env.fog_density = 0.0035 if OS.has_feature("web") else 0.006
 	env.fog_sky_affect = 0.45
 	world_environment.environment = env
 	add_child(world_environment)
@@ -575,7 +575,7 @@ func _setup_environment() -> void:
 	sun_light.light_color = Color(1.0, 0.88, 0.68)
 	sun_light.light_energy = 1.35
 	sun_light.shadow_enabled = not OS.has_feature("web")
-	sun_light.directional_shadow_max_distance = 90.0
+	sun_light.directional_shadow_max_distance = 65.0
 	sun_light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
 	add_child(sun_light)
 
@@ -632,7 +632,7 @@ func _build_terrain() -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.24, 0.29, 0.20)
+	mat.albedo_color = Color(0.70, 0.73, 0.65)
 	mat.roughness = 1.0
 	mat.metallic = 0.0
 	mat.vertex_color_use_as_albedo = false
@@ -641,6 +641,8 @@ func _build_terrain() -> void:
 	var ground_roughness := "res://assets/textures/forest_ground_06/Rough_1k_jpg.jpg"
 	if ResourceLoader.exists(ground_diffuse):
 		mat.albedo_texture = load(ground_diffuse) as Texture2D
+	else:
+		mat.albedo_color = Color(0.24, 0.29, 0.20)
 	if ResourceLoader.exists(ground_normal):
 		mat.normal_enabled = true
 		mat.normal_texture = load(ground_normal) as Texture2D
@@ -905,11 +907,35 @@ func _update_boat(delta: float) -> void:
 	boat.position.y = _river_surface_y(next_z) + 0.16
 	boat.velocity = Vector3.ZERO
 
+var surface_material_cache: Dictionary = {}
+var weathering_texture: NoiseTexture2D
+
 func _make_material(color: Color, roughness := 0.9, metallic := 0.0) -> StandardMaterial3D:
+	var key := str(color) + ":" + str(roughness) + ":" + str(metallic)
+	if surface_material_cache.has(key):
+		return surface_material_cache[key] as StandardMaterial3D
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
 	m.roughness = roughness
 	m.metallic = metallic
+	if roughness >= 0.85 and metallic < 0.1:
+		if weathering_texture == null:
+			var noise := FastNoiseLite.new()
+			noise.frequency = 0.065
+			noise.fractal_octaves = 4
+			var ramp := Gradient.new()
+			ramp.colors = PackedColorArray([Color(0.55, 0.55, 0.55), Color(1.0, 1.0, 1.0)])
+			weathering_texture = NoiseTexture2D.new()
+			weathering_texture.width = 256
+			weathering_texture.height = 256
+			weathering_texture.seamless = true
+			weathering_texture.noise = noise
+			weathering_texture.color_ramp = ramp
+		m.albedo_texture = weathering_texture
+		m.uv1_triplanar = true
+		m.uv1_world_triplanar = true
+		m.uv1_scale = Vector3(0.65, 0.65, 0.65)
+	surface_material_cache[key] = m
 	return m
 
 func _scatter_environment() -> void:
