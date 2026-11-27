@@ -622,7 +622,7 @@ func _build_terrain() -> void:
 			var b := a + 1
 			var c := a + segments + 1
 			var d := c + 1
-			indices.append_array(PackedInt32Array([a, c, b, b, c, d]))
+			indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
