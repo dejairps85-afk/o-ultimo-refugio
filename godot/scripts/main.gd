@@ -938,6 +938,26 @@ func _make_material(color: Color, roughness := 0.9, metallic := 0.0) -> Standard
 	surface_material_cache[key] = m
 	return m
 
+func _cinematic_surface(asset: String, fallback: Color) -> StandardMaterial3D:
+	var folder := "res://assets/textures/cinematic/" + asset + "/"
+	if not ResourceLoader.exists(folder + "albedo.jpg") or not ResourceLoader.exists(folder + "normal.jpg") or not ResourceLoader.exists(folder + "roughness.jpg"):
+		return _make_material(fallback, 0.95)
+	var key := "pbr:" + asset
+	if surface_material_cache.has(key):
+		return surface_material_cache[key] as StandardMaterial3D
+	var material := StandardMaterial3D.new()
+	material.albedo_texture = load(folder + "albedo.jpg") as Texture2D
+	material.normal_enabled = true
+	material.normal_texture = load(folder + "normal.jpg") as Texture2D
+	material.roughness_texture = load(folder + "roughness.jpg") as Texture2D
+	material.roughness = 1.0
+	material.uv1_triplanar = true
+	material.uv1_world_triplanar = true
+	material.uv1_scale = Vector3(0.5, 0.5, 0.5)
+	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	surface_material_cache[key] = material
+	return material
+
 func _scatter_environment() -> void:
 	# Mantém o mundo completo no desktop e reduz a densidade no navegador móvel.
 	var tree_count := 48 if OS.has_feature("web") else 100
@@ -1060,7 +1080,7 @@ func _build_abandoned_town() -> void:
 	var center := Vector2(72.0, -66.0)
 	town.position = Vector3(center.x, 0.0, center.y)
 	add_child(town)
-	var road_material := _make_material(Color(0.12, 0.13, 0.12), 0.98)
+	var road_material := _cinematic_surface("Asphalt033", Color(0.12, 0.13, 0.12))
 	var curb_material := _make_material(Color(0.34, 0.34, 0.29), 0.95)
 	var road_x := MeshInstance3D.new()
 	var road_x_mesh := BoxMesh.new()
@@ -1113,7 +1133,7 @@ func _build_abandoned_town() -> void:
 			"radius": maxf(dimensions.x, dimensions.z) * 0.48
 		})
 		var is_explorable := str(spec["n"]) in ["RESIDÊNCIA", "CLÍNICA", "MERCADO", "OFICINA", "DELEGACIA"]
-		var wall_material := _make_material(spec["c"], 0.92)
+		var wall_material := _cinematic_surface("Concrete012", spec["c"])
 		if is_explorable:
 			var floor_mesh := BoxMesh.new()
 			floor_mesh.size = Vector3(dimensions.x - 0.25, 0.18, dimensions.z - 0.25)
