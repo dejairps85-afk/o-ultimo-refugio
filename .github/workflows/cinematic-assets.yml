@@ -1,0 +1,25 @@
+name: Cinematic asset preparation
+on:
+  push:
+    branches: [feature/next-gen-rebuild]
+    paths:
+      - scripts/import_cinematic_materials.py
+      - .github/workflows/cinematic-assets.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  materials:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/import_cinematic_materials.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cinematic-pbr-materials
+          path: assets/textures/cinematic/
+          if-no-files-found: error
