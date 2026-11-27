@@ -1,0 +1,111 @@
+name: Validar novo núcleo (movimento, câmera, visual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: "Publicar esta versão no GitHub Pages para testar no iPhone"
+        type: boolean
+        default: false
+  push:
+    branches:
+      - "audit/**"
+      - "feature/core-rebuild"
+    paths:
+      - "core/**"
+      - "project.godot"
+      - "export_presets.cfg"
+      - "scripts/ci_web_touch_test.mjs"
+      - ".github/workflows/core-validation.yml"
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Baixar projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar Godot 4.4.1 e templates Web
+        run: |
+          curl -L --fail --retry 3 -o godot.zip https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
+          unzip -q godot.zip
+          chmod +x Godot_v4.4.1-stable_linux.x86_64
+          curl -L --fail --retry 3 -o templates.tpz https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz
+          mkdir -p "$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          unzip -q templates.tpz -d templates
+          find templates -type f \( -name 'web_nothreads_release.zip' -o -name 'web_nothreads_debug.zip' \) -exec cp {} "$HOME/.local/share/godot/export_templates/4.4.1.stable/" \;
+
+      # Os GLB do repositório usam EXT_meshopt_compression/KHR_mesh_quantization, que o
+      # importador do Godot 4.4 não lê. Normalizamos só dentro do CI (os arquivos do repo não mudam).
+      - name: Normalizar modelos 3D para o Godot
+        run: |
+          while IFS= read -r -d '' file; do
+            temp="${file%.glb}.normalized.glb"
+            npx --yes @gltf-transform/cli copy "$file" "$temp"
+            npx --yes @gltf-transform/cli dequantize "$temp" "$file"
+            rm -f "$temp"
+          done < <(find assets -type f -name '*.glb' -print0)
+
+      - name: Importar recursos
+        run: ./Godot_v4.4.1-stable_linux.x86_64 --headless --editor --path . --import --quit 2>&1 | tee /tmp/import.log
+
+      - name: Playtest automático (toques reais, movimento, câmera, colisão)
+        run: |
+          set -o pipefail
+          ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . -- --playtest 2>&1 | tee /tmp/playtest.log
+          grep -q "PLAYTEST: PASS" /tmp/playtest.log
+          if grep -E 'SCRIPT ERROR|Parse Error' /tmp/playtest.log; then exit 1; fi
+
+      - name: Exportar versão Web
+        run: |
+          mkdir -p build/web
+          ./Godot_v4.4.1-stable_linux.x86_64 --headless --path . --export-release "Web" build/web/index.html
+          test -s build/web/index.html
+
+      - name: Teste no navegador (iPhone virtual, toque real) e capturas reais
+        run: |
+          npm install --no-save playwright pngjs
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8765 --directory build/web >/tmp/web-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          node scripts/ci_web_touch_test.mjs build/web
+
+      - name: Guardar capturas reais do jogo
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-reais
+          path: build/web/ci-*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Guardar versão Web
+        uses: actions/upload-artifact@v4
+        with:
+          name: versao-web
+          path: build/web/
+          retention-days: 14
+
+      - name: Preparar publicação
+        if: ${{ inputs.deploy == true }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web/
+
+  deploy:
+    if: ${{ inputs.deploy == true }}
+    runs-on: ubuntu-24.04
+    needs: validate
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Publicar no GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
