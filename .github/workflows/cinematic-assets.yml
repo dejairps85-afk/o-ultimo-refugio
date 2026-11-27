@@ -7,7 +7,7 @@ on:
       - .github/workflows/cinematic-assets.yml
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   materials:
     runs-on: ubuntu-latest
@@ -23,3 +23,13 @@ jobs:
           name: cinematic-pbr-materials
           path: assets/textures/cinematic/
           if-no-files-found: error
+      - name: Save verified texture maps on experimental branch
+        if: github.ref == 'refs/heads/feature/next-gen-rebuild'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f assets/textures/cinematic/
+          if ! git diff --cached --quiet; then
+            git commit -m "Import cinematic CC0 PBR texture maps"
+            git push origin HEAD:feature/next-gen-rebuild
+          fi
