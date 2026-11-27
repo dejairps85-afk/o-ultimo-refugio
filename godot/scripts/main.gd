@@ -3770,15 +3770,26 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_boat()
 		else:
 			_interact_with_wilderness()
+
+func _joystick_center() -> Vector2:
+	if is_instance_valid(mobile_joystick_knob):
+		var base := mobile_joystick_knob.get_parent() as Control
+		if is_instance_valid(base):
+			return base.get_global_rect().get_center()
+	return Vector2(96.0, get_viewport().get_visible_rect().size.y - 100.0)
+
+func _input(event: InputEvent) -> void:
+	if not is_instance_valid(player) or not is_instance_valid(camera_arm):
+		return
 	if event is InputEventScreenTouch:
 		var viewport_size := get_viewport().get_visible_rect().size
 		if event.pressed:
-			if active_move_touch == -1 and event.position.distance_to(Vector2(96.0, viewport_size.y - 100.0)) <= 92.0:
+			if active_move_touch == -1 and event.position.distance_to(_joystick_center()) <= 92.0:
 				active_move_touch = event.index
-				var center := Vector2(96.0, viewport_size.y - 100.0)
+				var center := _joystick_center()
 				var stick_delta: Vector2 = event.position - center
 				_update_mobile_joystick(stick_delta)
-			elif active_look_touch == -1 and event.position.x > viewport_size.x * 0.50:
+			elif active_look_touch == -1 and event.position.x > viewport_size.x * 0.50 and event.position.y < viewport_size.y * 0.65:
 				active_look_touch = event.index
 		else:
 			if event.index == active_move_touch:
@@ -3790,7 +3801,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				active_look_touch = -1
 	elif event is InputEventScreenDrag:
 		if event.index == active_move_touch:
-			var center := Vector2(96.0, get_viewport().get_visible_rect().size.y - 100.0)
+			var center := _joystick_center()
 			_update_mobile_joystick(event.position - center)
 		elif event.index == active_look_touch:
 			camera_pivot.rotation.y -= event.relative.x * 0.0045
