@@ -7,6 +7,7 @@ const JUMP_VELOCITY := 6.8
 
 var player: CharacterBody3D
 var camera_pivot: Node3D
+var camera_arm: SpringArm3D
 var camera: Camera3D
 var move_touch := Vector2.ZERO
 var look_touch := Vector2.ZERO
@@ -1989,14 +1990,23 @@ func _build_player() -> void:
 
 	add_child(player)
 	camera_pivot = Node3D.new()
-	camera_pivot.position = Vector3(0, 1.55, 0)
+	camera_pivot.position = Vector3(0, 1.65, 0)
 	player.add_child(camera_pivot)
+	camera_pivot.top_level = true
+	camera_pivot.global_position = player.global_position + Vector3.UP * 1.65
+	camera_arm = SpringArm3D.new()
+	camera_arm.spring_length = 5.2
+	camera_arm.margin = 0.22
+	camera_arm.rotation_degrees.x = -12.0
+	var probe := SphereShape3D.new()
+	probe.radius = 0.24
+	camera_arm.shape = probe
+	camera_arm.add_excluded_object(player.get_rid())
+	camera_pivot.add_child(camera_arm)
 	camera = Camera3D.new()
-	camera.position = Vector3(0, 2.15, 6.8)
-	camera.fov = 74.0
-	camera.rotation_degrees.x = -12
+	camera.fov = 68.0
 	camera.current = true
-	camera_pivot.add_child(camera)
+	camera_arm.add_child(camera)
 
 func _spawn_infected(count: int = 7) -> void:
 	var variants := [
@@ -3738,7 +3748,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_update_mobile_joystick(event.position - center)
 		elif event.index == active_look_touch:
 			camera_pivot.rotation.y -= event.relative.x * 0.0045
-			camera.rotation.x = clampf(camera.rotation.x - event.relative.y * 0.0035, -0.85, 0.15)
+			camera_arm.rotation.x = clampf(camera_arm.rotation.x - event.relative.y * 0.0035, -0.70, 0.28)
 
 
 func _update_mobile_joystick(delta: Vector2) -> void:
@@ -3907,9 +3917,8 @@ func _apply_crouch_pose() -> void:
 		capsule.height = 1.38 if crouch_enabled else 1.85
 		collision.position.y = capsule.height * 0.5
 	if is_instance_valid(camera_pivot):
-		camera_pivot.position.y = 1.05 if crouch_enabled else 1.55
+		camera_pivot.global_position = player.global_position + Vector3.UP * (1.15 if crouch_enabled else 1.65)
 	if is_instance_valid(camera):
-		camera.position.y = 1.75 if crouch_enabled else 2.15
 
 func _toggle_crouch() -> void:
 	crouch_enabled = not crouch_enabled
@@ -4035,14 +4044,15 @@ func _physics_process(delta: float) -> void:
 		player.velocity.x = dodge_direction.x * 14.0
 		player.velocity.z = dodge_direction.z * 14.0
 	elif moving:
-		player.velocity.x = direction.x * movement_speed
-		player.velocity.z = direction.z * movement_speed
-		player.rotation.y = lerp_angle(player.rotation.y, atan2(-direction.x, -direction.z), delta * 9.0)
+		var target_velocity := direction * movement_speed * minf(input_dir.length(), 1.0)
+		player.velocity.x = move_toward(player.velocity.x, target_velocity.x, PLAYER_SPEED * 7.0 * delta)
+		player.velocity.z = move_toward(player.velocity.z, target_velocity.z, PLAYER_SPEED * 7.0 * delta)
+		player.rotation.y = lerp_angle(player.rotation.y, atan2(-direction.x, -direction.z), 1.0 - exp(-9.0 * delta))
 	else:
 		player.velocity.x = move_toward(player.velocity.x, 0.0, PLAYER_SPEED * 5.0 * delta)
 		player.velocity.z = move_toward(player.velocity.z, 0.0, PLAYER_SPEED * 5.0 * delta)
 	if is_instance_valid(camera):
-		var target_fov := 80.0 if sprinting or dodge_timer > 0.0 else 74.0
+		var target_fov := 74.0 if sprinting or dodge_timer > 0.0 else 68.0
 		camera.fov = lerpf(camera.fov, target_fov, 1.0 - exp(-4.0 * delta))
 	if not player.is_on_floor():
 		player.velocity.y -= 19.0 * delta
